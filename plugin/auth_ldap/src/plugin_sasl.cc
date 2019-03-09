@@ -42,34 +42,34 @@ int alp_sasl_authenticate(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info) {
 
 // System Variables
 static MYSQL_SYSVAR_STR(
-    alp_sasl_dn, authentication_ldap_sasl_bind_base_dn,
+    bind_base_dn, authentication_ldap_sasl_bind_base_dn,
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
     "For SASL LDAP authentication, the base distinguished name (DN)",
     nullptr /* check */, nullptr /* update */, nullptr /* default */);
-static MYSQL_SYSVAR_STR(alp_sasl_host, authentication_ldap_sasl_server_host,
+static MYSQL_SYSVAR_STR(server_host, authentication_ldap_sasl_server_host,
                         PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
                         "For SASL LDAP authentication, the LDAP server host",
                         nullptr /* check */, nullptr /* update */,
                         nullptr /* default */);
 static MYSQL_SYSVAR_UINT(
-    alp_sasl_port, authentication_ldap_sasl_server_port, PLUGIN_VAR_RQCMDARG,
+    server_port, authentication_ldap_sasl_server_port, PLUGIN_VAR_RQCMDARG,
     "For SASL LDAP authentication, the LDAP server TCP/IP port number",
     nullptr /* check */, nullptr /* update */, 389 /* default */,
     1 /*minimum */, 32376 /* maximum */, 0 /* blocksize */);
 
-static SYS_VAR *alp_sasl_sysvars[] = {MYSQL_SYSVAR(alp_sasl_dn),
-                                      MYSQL_SYSVAR(alp_sasl_host),
-                                      MYSQL_SYSVAR(alp_sasl_port), nullptr};
+static SYS_VAR *alp_sasl_sysvars[] = {MYSQL_SYSVAR(bind_base_dn),
+                                      MYSQL_SYSVAR(server_host),
+                                      MYSQL_SYSVAR(server_port), nullptr};
 
 // Plugin declaration
 struct st_mysql_auth alp_sasl_handler = {
     MYSQL_AUTHENTICATION_INTERFACE_VERSION,  // int interface_version
     "mysql_clear_password",                  // const char *client_auth_plugin
-    &alp_sasl_authenticate,
-    nullptr,  // generate_authentication_string,
-    nullptr,  // validate_authentication_string,
-    nullptr,  // set_salt,
-    0UL,      // const unsigned long authentication_flags
+    &alp_sasl_authenticate,                  // authentication function
+    &auth_ldap_generate_auth_string_hash,    // generate_authentication_string
+    &auth_ldap_validate_auth_string_hash,    // validate_authentication_string
+    &auth_ldap_set_salt,                     // set_salt
+    0UL,  // const unsigned long authentication_flags
     nullptr};
 
 mysql_declare_plugin(auth_ldap_sasl) {

@@ -15,6 +15,6 @@
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
 #define _PLUGIN_SIMPLE_ALP_H
 
-#define ALP_SIMPLE_PLUGIN_NAME "auth_ldap_simple"
+#define ALP_SIMPLE_PLUGIN_NAME "authentication_ldap_simple"
 
 #endif  // _PLUGIN_SIMPLE_ALP_H

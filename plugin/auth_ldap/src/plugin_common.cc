@@ -48,3 +48,29 @@ int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
   DBUG_RETURN(CR_ERROR);
   // TODO: proxy support // char authenticated_as[MYSQL_USERNAME_LENGTH+1];
 }
+
+int auth_ldap_generate_auth_string_hash(char *outbuf, unsigned int *buflen,
+                                        const char *inbuf,
+                                        unsigned int inbuflen) {
+  /*
+    fail if buffer specified by server cannot be copied to output buffer
+  */
+  if (*buflen < inbuflen) return 1; /* error */
+  strncpy(outbuf, inbuf, inbuflen);
+  *buflen = strlen(inbuf);
+  return 0; /* success */
+}
+
+int auth_ldap_validate_auth_string_hash(char *const buf __attribute__((unused)),
+                                        unsigned int len
+                                        __attribute__((unused))) {
+  return 0; /* success */
+}
+
+int auth_ldap_set_salt(const char *password __attribute__((unused)),
+                       unsigned int password_len __attribute__((unused)),
+                       unsigned char *salt __attribute__((unused)),
+                       unsigned char *salt_len) {
+  *salt_len = 0;
+  return 0; /* success */
+}

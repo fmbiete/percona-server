@@ -43,37 +43,36 @@ int alp_simple_authenticate(MYSQL_PLUGIN_VIO *vio,
 
 // System Variables
 static MYSQL_SYSVAR_STR(
-    alp_simple_dn, authentication_ldap_simple_bind_base_dn,
+    // authentication_ldap_simple_ + short name
+    bind_base_dn, authentication_ldap_simple_bind_base_dn,
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
     "For Simple LDAP authentication, the base distinguished name (DN)",
     nullptr /* check */, nullptr /* update */, nullptr /* default */);
-static MYSQL_SYSVAR_STR(alp_simple_host, authentication_ldap_simple_server_host,
+static MYSQL_SYSVAR_STR(server_host, authentication_ldap_simple_server_host,
                         PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
                         "For Simple LDAP authentication, the LDAP server host",
                         nullptr /* check */, nullptr /* update */,
                         nullptr /* default */);
 static MYSQL_SYSVAR_UINT(
-    alp_simple_port, authentication_ldap_simple_server_port,
-    PLUGIN_VAR_RQCMDARG,
+    server_port, authentication_ldap_simple_server_port, PLUGIN_VAR_RQCMDARG,
     "For Simple LDAP authentication, the LDAP server TCP/IP port number",
     nullptr /* check */, nullptr /* update */, 389 /* default */,
     1 /*minimum */, 32376 /* maximum */, 0 /* blocksize */);
 
-static SYS_VAR *alp_simple_sysvars[] = {MYSQL_SYSVAR(alp_simple_dn),
-                                        MYSQL_SYSVAR(alp_simple_host),
-                                        MYSQL_SYSVAR(alp_simple_port), nullptr};
+static SYS_VAR *alp_simple_sysvars[] = {MYSQL_SYSVAR(bind_base_dn),
+                                        MYSQL_SYSVAR(server_host),
+                                        MYSQL_SYSVAR(server_port), nullptr};
 
 // Plugin declaration
 struct st_mysql_auth alp_simple_handler = {
     MYSQL_AUTHENTICATION_INTERFACE_VERSION,  // int interface_version
-    "mysql_clear_password",                  // const char *client_auth_plugin
-    &alp_simple_authenticate,
-    nullptr,  // generate_authentication_string,
-    nullptr,  // validate_authentication_string,
-    nullptr,  // set_salt,
-    0UL,      // const unsigned long authentication_flags
+    "dialog",                                // const char *client_auth_plugin
+    &alp_simple_authenticate,                // authentication function
+    &auth_ldap_generate_auth_string_hash,    // generate_authentication_string,
+    &auth_ldap_validate_auth_string_hash,    // validate_authentication_string,
+    &auth_ldap_set_salt,                     // set_salt,
+    0UL,  // const unsigned long authentication_flags
     nullptr};
-
 
 mysql_declare_plugin(auth_ldap_simple) {
   MYSQL_AUTHENTICATION_PLUGIN,             /* plugin type */
@@ -82,16 +81,16 @@ mysql_declare_plugin(auth_ldap_simple) {
       "Francisco Miguel Biete Banon",      /* author */
       "LDAP Simple authentication plugin", /* description */
       PLUGIN_LICENSE_GPL,                  /* license type */
-      &auth_ldap_simple_init,                             /* no init function */
+      &auth_ldap_simple_init,              /* no init function */
       nullptr,                             /* no deinit function */
       nullptr,                             /* no check function */
       0x0100,                              /* version = 1.0 */
       nullptr,                             /* no status variables */
       alp_simple_sysvars,                  /* no system variables */
       nullptr                              /* no reserved information */
-//#if MYSQL_PLUGIN_INTERFACE_VERSION >= 0x103
+#if MYSQL_PLUGIN_INTERFACE_VERSION >= 0x103
       ,
       0 /* no flags */
-//#endif
+#endif
 }
 mysql_declare_plugin_end;

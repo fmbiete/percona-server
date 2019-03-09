@@ -15,6 +15,6 @@
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
 #define _PLUGIN_SASL_ALP_H
 
-#define ALP_SASL_PLUGIN_NAME "auth_ldap_sasl"
+#define ALP_SASL_PLUGIN_NAME "authentication_ldap_sasl"
 
 #endif  // _PLUGIN_SASL_ALP_H

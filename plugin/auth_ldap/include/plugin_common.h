@@ -23,4 +23,13 @@
 int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
                                 MYSQL_SERVER_AUTH_INFO *info);
 
+int auth_ldap_generate_auth_string_hash(char *outbuf, unsigned int *buflen,
+                                        const char *inbuf,
+                                        unsigned int inbuflen);
+
+int auth_ldap_validate_auth_string_hash(char *const buf, unsigned int len);
+
+int auth_ldap_set_salt(const char *password, unsigned int password_len,
+                       unsigned char *salt, unsigned char *salt_len);
+
 #endif  // _PLUGIN_COMMON_ALP_H

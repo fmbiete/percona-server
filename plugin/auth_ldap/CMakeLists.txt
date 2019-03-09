@@ -35,7 +35,20 @@ IF(WITH_LDAP)
     ### Configuration ###
     ADD_DEFINITIONS(-DLOG_COMPONENT_TAG="AUTH_LDAP")
     ADD_DEFINITIONS(-DLDAP_DEPRECATED=1)
-    MYSQL_ADD_PLUGIN(auth_ldap_sasl ${ALP_SOURCES_SASL} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "auth_ldap_sasl")
-    MYSQL_ADD_PLUGIN(auth_ldap_simple ${ALP_SOURCES_SIMPLE} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "auth_ldap_simple")
+    MYSQL_ADD_PLUGIN(authentication_ldap_sasl ${ALP_SOURCES_SASL} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "authentication_ldap_sasl")
+    MYSQL_ADD_PLUGIN(authentication_ldap_simple ${ALP_SOURCES_SIMPLE} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "authentication_ldap_simple")
+
+    MYSQL_ADD_PLUGIN(dialog
+                     ../percona-pam-for-mysql/src/dialog.cc
+                     ../../client/get_password.cc
+                     LINK_LIBRARIES perconaserverclient
+                     MODULE_ONLY)
+
+    IF(UNIX)
+      IF(INSTALL_MYSQLTESTDIR)
+        INSTALL(DIRECTORY tests/mtr/ DESTINATION ${INSTALL_MYSQLTESTDIR}/suite/auth_ldap COMPONENT Test)
+      ENDIF(INSTALL_MYSQLTESTDIR)
+    ENDIF(UNIX)
+
   ENDIF(HAVE_LDAP)
 ENDIF(WITH_LDAP)

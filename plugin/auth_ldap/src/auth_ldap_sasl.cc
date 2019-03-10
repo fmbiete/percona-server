@@ -17,17 +17,14 @@
 #include <ldap.h>
 
 namespace alp {
-bool AuthLDAPSASL::bind(char *password) {
+bool AuthLDAPSASL::bind(const char *password) {
   struct berval *serverCreds;
-  struct berval userCreds;
-  unsigned int len = strlen(password);
-  userCreds.bv_val = password;
-  userCreds.bv_len = len;
+  struct berval *userCreds = ber_str2bv(strdup(password), 0, 0, nullptr);
 
-  int err = ldap_sasl_bind_s(ldap, dn.c_str(), LDAP_SASL_SIMPLE, &userCreds,
+  int err = ldap_sasl_bind_s(ldap, dn.c_str(), LDAP_SASL_SIMPLE, userCreds,
                              nullptr, nullptr, &serverCreds);
 
-  get_error(err);
+  set_error(err);
   return err == LDAP_SUCCESS;
 }
 }  // namespace alp

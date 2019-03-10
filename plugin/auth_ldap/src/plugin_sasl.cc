@@ -20,9 +20,17 @@
 MYSQL_PLUGIN auth_ldap_sasl_plugin_info;
 
 static int auth_ldap_sasl_init(MYSQL_PLUGIN plugin_info) {
-  auth_ldap_init();
+  auth_ldap_common_init();
 
   auth_ldap_sasl_plugin_info = plugin_info;
+  return 0;
+}
+
+static int auth_ldap_sasl_deinit(MYSQL_PLUGIN plugin_info
+                                 __attribute__((unused))) {
+  auth_ldap_common_deinit();
+
+  auth_ldap_sasl_plugin_info = nullptr;
   return 0;
 }
 
@@ -37,7 +45,7 @@ int alp_sasl_authenticate(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info) {
       new alp::AuthLDAPSASL(authentication_ldap_sasl_server_host,
                             authentication_ldap_sasl_server_port,
                             authentication_ldap_sasl_bind_base_dn);
-  return auth_ldap_authenticate_user(obj, vio, info);
+  return auth_ldap_common_authenticate_user(obj, vio, info);
 }
 
 // System Variables
@@ -66,9 +74,9 @@ struct st_mysql_auth alp_sasl_handler = {
     MYSQL_AUTHENTICATION_INTERFACE_VERSION,  // int interface_version
     "dialog",                                // const char *client_auth_plugin
     &alp_sasl_authenticate,                  // authentication function
-    &auth_ldap_generate_auth_string_hash,    // generate_authentication_string
-    &auth_ldap_validate_auth_string_hash,    // validate_authentication_string
-    &auth_ldap_set_salt,                     // set_salt
+    &auth_ldap_common_generate_auth_string_hash,  // generate_authentication_string
+    &auth_ldap_common_validate_auth_string_hash,  // validate_authentication_string
+    &auth_ldap_common_set_salt,                   // set_salt
     0UL,  // const unsigned long authentication_flags
     nullptr};
 
@@ -80,7 +88,7 @@ mysql_declare_plugin(auth_ldap_sasl) {
       "LDAP SASL authentication plugin", /* description */
       PLUGIN_LICENSE_GPL,                /* license type */
       &auth_ldap_sasl_init,              /* init function */
-      nullptr,                           /* no deinit function */
+      &auth_ldap_sasl_deinit,            /* deinit function */
       nullptr,                           /* no check function */
       0x0100,                            /* version = 1.0 */
       nullptr,                           /* no status variables */

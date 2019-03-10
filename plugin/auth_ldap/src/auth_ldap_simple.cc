@@ -17,10 +17,10 @@
 #include <ldap.h>
 
 namespace alp {
-bool AuthLDAPSimple::bind(char *password) {
+bool AuthLDAPSimple::bind(const char *password) {
   // This function is deprecated; requires LDAP_DEPRECATED
   int err = ldap_simple_bind_s(ldap, dn.c_str(), password);
-  get_error(err);
+  set_error(err);
 
   return err == LDAP_SUCCESS;
 }

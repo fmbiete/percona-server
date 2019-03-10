@@ -25,26 +25,29 @@ static SERVICE_TYPE(registry) *reg_srv = nullptr;
 SERVICE_TYPE(log_builtins) *log_bi = nullptr;
 SERVICE_TYPE(log_builtins_string) *log_bs = nullptr;
 
-int auth_ldap_init() {
-  // Initialize error logging service.
+int auth_ldap_common_init() {
   if (init_logging_service_for_plugin(&reg_srv, &log_bi, &log_bs)) return 1;
 
   return 0;
 }
 
-int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
-                                MYSQL_SERVER_AUTH_INFO *info) {
-  DBUG_ENTER("auth_ldap_authenticate_user");
+int auth_ldap_common_deinit() {
+  deinit_logging_service_for_plugin(&reg_srv, &log_bi, &log_bs);
 
-  LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "auth_ldap_authenticate_user");
+  return 0;
+}
+
+int auth_ldap_common_authenticate_user(alp::AuthLDAPBase *obj,
+                                       MYSQL_PLUGIN_VIO *vio,
+                                       MYSQL_SERVER_AUTH_INFO *info) {
+  DBUG_ENTER("auth_ldap_common_authenticate_user");
+
   /* send a password question */
   if (vio->write_packet(vio, (const unsigned char *)PASSWORD_QUESTION, 1)) {
     LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG,
-                 "Failed to write password packet");
+                 "Failed to write password packet", info->user_name);
     DBUG_RETURN(CR_ERROR);
   }
-
-  LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "write_packet");
 
   unsigned char *password;
   if ((vio->read_packet(vio, &password)) < 0) {
@@ -54,20 +57,15 @@ int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
   }
   info->password_used = PASSWORD_USED_YES;
 
-  LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "read_packet");
-
   if (obj->prepare(info->user_name, info->auth_string,
                    info->auth_string_length)) {
-    LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "prepare");
     bool res = obj->bind(static_cast<char *>(static_cast<void *>(password)));
-    LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "bind");
-    // delete password;
     if (res) {
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "LDAP bind successful");
       DBUG_RETURN(CR_OK);
     } else {
       LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "LDAP bind unsuccessful");
       LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->error());
+      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, info->user_name);
       LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_uri());
       LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_dn());
       LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_default_dn());
@@ -75,7 +73,7 @@ int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
     }
   } else {
     LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "Failed to prepare auth ldap");
-    // delete password;
+    LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->error());
     DBUG_RETURN(CR_AUTH_PLUGIN_ERROR);
   }
 
@@ -84,9 +82,10 @@ int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
   // TODO: proxy support // char authenticated_as[MYSQL_USERNAME_LENGTH+1];
 }
 
-int auth_ldap_generate_auth_string_hash(char *outbuf, unsigned int *buflen,
-                                        const char *inbuf,
-                                        unsigned int inbuflen) {
+int auth_ldap_common_generate_auth_string_hash(char *outbuf,
+                                               unsigned int *buflen,
+                                               const char *inbuf,
+                                               unsigned int inbuflen) {
   /*
     fail if buffer specified by server cannot be copied to output buffer
   */
@@ -96,16 +95,17 @@ int auth_ldap_generate_auth_string_hash(char *outbuf, unsigned int *buflen,
   return 0; /* success */
 }
 
-int auth_ldap_validate_auth_string_hash(char *const buf __attribute__((unused)),
-                                        unsigned int len
-                                        __attribute__((unused))) {
+int auth_ldap_common_validate_auth_string_hash(char *const buf
+                                               __attribute__((unused)),
+                                               unsigned int len
+                                               __attribute__((unused))) {
   return 0; /* success */
 }
 
-int auth_ldap_set_salt(const char *password __attribute__((unused)),
-                       unsigned int password_len __attribute__((unused)),
-                       unsigned char *salt __attribute__((unused)),
-                       unsigned char *salt_len) {
+int auth_ldap_common_set_salt(const char *password __attribute__((unused)),
+                              unsigned int password_len __attribute__((unused)),
+                              unsigned char *salt __attribute__((unused)),
+                              unsigned char *salt_len) {
   *salt_len = 0;
   return 0; /* success */
 }

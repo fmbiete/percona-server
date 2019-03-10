@@ -25,7 +25,7 @@ class AuthLDAPBase {
   AuthLDAPBase(const char *host, unsigned int port, const char *dn,
                bool simple);
   ~AuthLDAPBase();
-  virtual bool bind(char *password) = 0;
+  virtual bool bind(const char *password) = 0;
   inline const char *debug_default_dn() { return default_dn.c_str(); }
   inline const char *debug_dn() { return dn.c_str(); }
   inline const char *debug_uri() { return uri.c_str(); }
@@ -39,8 +39,9 @@ class AuthLDAPBase {
                 unsigned long dn_str_len);
 
  protected:
-  inline void get_error(int err) { error_msg = ldap_err2string(err); }
+  inline void set_error(int err) { error_msg = ldap_err2string(err); }
 
+  bool sasl;
   LDAP *ldap;
   std::string default_dn;
   std::string dn;

@@ -18,6 +18,7 @@ namespace alp {
 AuthLDAPBase::AuthLDAPBase(const char *host, unsigned int port, const char *dn,
                            bool simple) {
   this->ldap = nullptr;
+  this->sasl = !simple;
   this->uri = std::string(simple ? "ldap://" : "ldaps://")
                   .append(host)
                   .append(":")
@@ -46,18 +47,30 @@ void AuthLDAPBase::build_dn(const char *user_name, const char *dn_str,
 
 bool AuthLDAPBase::prepare(const char *user_name, const char *dn_str,
                            unsigned long dn_str_len) {
-  if (ldap_initialize(&ldap, uri.c_str()) != LDAP_SUCCESS) {
-    error_msg =
-        std::string("Failed to connect to LDAP server: ").append(this->uri);
+  // TLS configuration must be changed BEFORE initializing ldap or the TLS
+  // session you get will have the default configuration Ref:
+  // https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=823232
+  int reqCert = LDAP_OPT_X_TLS_NEVER;
+  int err = ldap_set_option(nullptr, LDAP_OPT_X_TLS_REQUIRE_CERT, &reqCert);
+  if (err != LDAP_OPT_SUCCESS) {
+    set_error(err);
+    return false;
+  }
+
+  err = ldap_initialize(&ldap, uri.c_str());
+  if (err != LDAP_SUCCESS) {
+    set_error(err);
     return false;
   }
 
   int version = LDAP_VERSION3;
-  if (ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION, &version) !=
-      LDAP_OPT_SUCCESS) {
-    error_msg = std::string("Failed to set LDAP protocol version to 3");
+  err = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION, &version);
+  if (err != LDAP_OPT_SUCCESS) {
+    set_error(err);
     return false;
   }
+
+  ldap_set_option(ldap, LDAP_OPT_REFERRALS, LDAP_OPT_OFF);
 
   build_dn(user_name, dn_str, dn_str_len);
 

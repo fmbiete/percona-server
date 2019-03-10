@@ -22,7 +22,7 @@ class AuthLDAPSASL : public AuthLDAPBase {
  public:
   AuthLDAPSASL(const char *host, unsigned int port, const char *dn)
       : AuthLDAPBase(host, port, dn, false){};
-  virtual bool bind(char *password);
+  virtual bool bind(const char *password);
 };
 }  // namespace alp
 #endif  // _AUTH_LDAP_SASL_ALP_H

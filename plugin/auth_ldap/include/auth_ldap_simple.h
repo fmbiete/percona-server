@@ -22,7 +22,7 @@ class AuthLDAPSimple : public AuthLDAPBase {
  public:
   AuthLDAPSimple(const char *host, unsigned int port, const char *dn)
       : AuthLDAPBase(host, port, dn, true){};
-  virtual bool bind(char *password);
+  virtual bool bind(const char *password);
 };
 }  // namespace alp
 #endif  // _AUTH_LDAP_SIMPLE_ALP_H

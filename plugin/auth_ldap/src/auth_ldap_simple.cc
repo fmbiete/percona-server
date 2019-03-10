@@ -19,6 +19,9 @@
 namespace alp {
 bool AuthLDAPSimple::bind(char *password) {
   // This function is deprecated; requires LDAP_DEPRECATED
-  return ldap_simple_bind_s(ldap, dn.c_str(), password) == LDAP_SUCCESS;
+  int err = ldap_simple_bind_s(ldap, dn.c_str(), password);
+  get_error(err);
+
+  return err == LDAP_SUCCESS;
 }
 }  // namespace alp

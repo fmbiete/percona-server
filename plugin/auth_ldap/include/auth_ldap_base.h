@@ -28,12 +28,15 @@ class AuthLDAPBase {
                unsigned long dn_str_len);
   virtual bool bind(char *password) = 0;
   inline bool is_error() { return error_msg.empty(); }
+  inline const char *error() { return error_msg.c_str(); }
 
  private:
   void build_dn(const char *user_name, const char *dn_str,
                 unsigned long dn_str_len);
 
  protected:
+  inline void get_error(int err) { error_msg = ldap_err2string(err); }
+
   LDAP *ldap;
   std::string default_dn;
   std::string dn;

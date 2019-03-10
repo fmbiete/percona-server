@@ -22,6 +22,8 @@
 MYSQL_PLUGIN auth_ldap_simple_plugin_info;
 
 static int auth_ldap_simple_init(MYSQL_PLUGIN plugin_info) {
+  auth_ldap_init();
+
   auth_ldap_simple_plugin_info = plugin_info;
   return 0;
 }

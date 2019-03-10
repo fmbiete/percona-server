@@ -19,6 +19,19 @@
 #include "my_dbug.h"
 #include "my_sys.h"
 #include "mysql/plugin_auth.h"
+#include "mysqld_error.h"
+
+/**
+  first byte of the question string is the question "type".
+  It can be a "ordinary" or a "password" question.
+  The last bit set marks a last question in the authentication exchange.
+*/
+#define ORDINARY_QUESTION "\2"
+#define LAST_QUESTION "\3"
+#define LAST_PASSWORD "\4"
+#define PASSWORD_QUESTION "\5"
+
+int auth_ldap_init();
 
 int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
                                 MYSQL_SERVER_AUTH_INFO *info);

@@ -21,7 +21,7 @@ namespace alp {
 class AuthLDAPSimple : public AuthLDAPBase {
  public:
   AuthLDAPSimple(const char *host, unsigned int port, const char *dn)
-      : AuthLDAPBase(host, port, dn){};
+      : AuthLDAPBase(host, port, dn, true){};
   virtual bool bind(char *password);
 };
 }  // namespace alp

@@ -36,8 +36,7 @@ int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
                                 MYSQL_SERVER_AUTH_INFO *info) {
   DBUG_ENTER("auth_ldap_authenticate_user");
 
-  LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG,
-               "auth_ldap_authenticate_user");
+  LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "auth_ldap_authenticate_user");
   /* send a password question */
   if (vio->write_packet(vio, (const unsigned char *)PASSWORD_QUESTION, 1)) {
     LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG,
@@ -64,12 +63,14 @@ int auth_ldap_authenticate_user(alp::AuthLDAPBase *obj, MYSQL_PLUGIN_VIO *vio,
     LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "bind");
     // delete password;
     if (res) {
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG,
-                   "LDAP bind successful");
+      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "LDAP bind successful");
       DBUG_RETURN(CR_OK);
     } else {
       LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "LDAP bind unsuccessful");
       LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->error());
+      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_uri());
+      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_dn());
+      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_default_dn());
       DBUG_RETURN(CR_AUTH_USER_CREDENTIALS);
     }
   } else {

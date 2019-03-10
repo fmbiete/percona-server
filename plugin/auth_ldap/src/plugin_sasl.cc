@@ -17,11 +17,11 @@
 #include "plugin/auth_ldap/include/plugin_common.h"
 #include "plugin/auth_ldap/include/plugin_sasl.h"
 
-#include "mysql/components/services/log_builtins.h"
-
 MYSQL_PLUGIN auth_ldap_sasl_plugin_info;
 
 static int auth_ldap_sasl_init(MYSQL_PLUGIN plugin_info) {
+  auth_ldap_init();
+
   auth_ldap_sasl_plugin_info = plugin_info;
   return 0;
 }
@@ -64,7 +64,7 @@ static SYS_VAR *alp_sasl_sysvars[] = {MYSQL_SYSVAR(bind_base_dn),
 // Plugin declaration
 struct st_mysql_auth alp_sasl_handler = {
     MYSQL_AUTHENTICATION_INTERFACE_VERSION,  // int interface_version
-    "mysql_clear_password",                  // const char *client_auth_plugin
+    "dialog",                                // const char *client_auth_plugin
     &alp_sasl_authenticate,                  // authentication function
     &auth_ldap_generate_auth_string_hash,    // generate_authentication_string
     &auth_ldap_validate_auth_string_hash,    // validate_authentication_string

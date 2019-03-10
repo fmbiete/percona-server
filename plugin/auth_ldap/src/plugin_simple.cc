@@ -17,8 +17,6 @@
 #include "plugin/auth_ldap/include/plugin_common.h"
 #include "plugin/auth_ldap/include/plugin_simple.h"
 
-#include "mysql/components/services/log_builtins.h"
-
 MYSQL_PLUGIN auth_ldap_simple_plugin_info;
 
 static int auth_ldap_simple_init(MYSQL_PLUGIN plugin_info) {

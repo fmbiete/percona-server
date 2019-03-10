@@ -24,8 +24,10 @@ bool AuthLDAPSASL::bind(char *password) {
   userCreds.bv_val = password;
   userCreds.bv_len = len;
 
-  bool res = ldap_sasl_bind_s(ldap, dn.c_str(), LDAP_SASL_SIMPLE, &userCreds,
-                              nullptr, nullptr, &serverCreds) == LDAP_SUCCESS;
-  return res;
+  int err = ldap_sasl_bind_s(ldap, dn.c_str(), LDAP_SASL_SIMPLE, &userCreds,
+                             nullptr, nullptr, &serverCreds);
+
+  get_error(err);
+  return err == LDAP_SUCCESS;
 }
 }  // namespace alp

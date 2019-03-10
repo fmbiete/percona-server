@@ -22,13 +22,17 @@
 namespace alp {
 class AuthLDAPBase {
  public:
-  AuthLDAPBase(const char *host, unsigned int port, const char *dn);
+  AuthLDAPBase(const char *host, unsigned int port, const char *dn,
+               bool simple);
   ~AuthLDAPBase();
-  bool prepare(const char *user_name, const char *dn_str,
-               unsigned long dn_str_len);
   virtual bool bind(char *password) = 0;
-  inline bool is_error() { return error_msg.empty(); }
+  inline const char *debug_default_dn() { return default_dn.c_str(); }
+  inline const char *debug_dn() { return dn.c_str(); }
+  inline const char *debug_uri() { return uri.c_str(); }
   inline const char *error() { return error_msg.c_str(); }
+  inline bool is_error() { return error_msg.empty(); }
+  bool prepare(const char *user_name, const char *dn_str,
+    unsigned long dn_str_len);
 
  private:
   void build_dn(const char *user_name, const char *dn_str,

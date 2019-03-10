@@ -15,11 +15,13 @@
 #include "plugin/auth_ldap/include/auth_ldap_base.h"
 
 namespace alp {
-AuthLDAPBase::AuthLDAPBase(const char *host, unsigned int port,
-                           const char *dn) {
+AuthLDAPBase::AuthLDAPBase(const char *host, unsigned int port, const char *dn,
+                           bool simple) {
   this->ldap = nullptr;
-  this->uri = std::string("ldap://").append(host).append(":").append(
-      std::to_string(port));
+  this->uri = std::string(simple ? "ldap://" : "ldaps://")
+                  .append(host)
+                  .append(":")
+                  .append(std::to_string(port));
   this->default_dn = dn;
 }
 

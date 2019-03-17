@@ -13,61 +13,79 @@
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
 
-#include "plugin/auth_ldap/include/auth_ldap_sasl.h"
+#include "plugin/auth_ldap/include/auth_ldap_connection_pool.h"
 #include "plugin/auth_ldap/include/plugin_common.h"
+#include "plugin/auth_ldap/include/plugin_log.h"
 #include "plugin/auth_ldap/include/plugin_sasl.h"
+#include "plugin/auth_ldap/include/plugin_variables.h"
 
 MYSQL_PLUGIN auth_ldap_sasl_plugin_info;
 
-static int auth_ldap_sasl_init(MYSQL_PLUGIN plugin_info) {
-  auth_ldap_common_init();
+// Declaration to access the name of the SYS_VAR
+struct SYS_VAR {
+  MYSQL_PLUGIN_VAR_HEADER;
+};
 
+template <typename Copy_type>
+void update_sysvar(THD *, SYS_VAR *var, void *var_ptr, const void *value) {
+  // Update the value
+  *(Copy_type *)var_ptr = *(Copy_type *)value;
+
+  if (strcmp(var->name, "authentication_ldap_sasl_log_status") == 0)
+    set_alp_log_status(log_status);
+  else {
+    connPool->reconfigure(init_pool_size, max_pool_size, STR_NULL(server_host),
+                          server_port, ssl, tls, STR_NULL(bind_root_dn),
+                          STR_NULL(bind_root_pwd), STR_NULL(ca_path));
+  }
+}
+
+static int auth_ldap_sasl_init(MYSQL_PLUGIN plugin_info) {
   auth_ldap_sasl_plugin_info = plugin_info;
+  set_alp_log_plugin(&auth_ldap_sasl_plugin_info);
+  set_alp_log_status(log_status);
+  auth_ldap_common_init();
+  log_debug("auth_ldap_sasl_init()");
+
+  log_debug("Creating LDAP connection pool");
+  log_debug("init_pool_size %d", init_pool_size);
+  log_debug("max_pool_size %d", max_pool_size);
+  log_debug("server_host %s", server_host);
+  log_debug("server_port %d", server_port);
+  log_debug("ssl %d", ssl);
+  log_debug("tls %d", tls);
+  log_debug("bind_root_dn %s", bind_root_dn);
+  log_debug("bind_root_pwd %s", bind_root_pwd);
+  log_debug("ca_path %s", ca_path);
+  log_debug("auth_method_name %s", auth_method_name);
+  connPool = new alp::AuthLDAPConnectionPool(
+      init_pool_size, max_pool_size, server_host == nullptr ? "" : server_host,
+      server_port, ssl, tls, bind_root_dn == nullptr ? "" : bind_root_dn,
+      bind_root_pwd == nullptr ? "" : bind_root_pwd,
+      ca_path == nullptr ? "" : ca_path);
+
+  log_info("Plugin initialized");
+
   return 0;
 }
 
 static int auth_ldap_sasl_deinit(MYSQL_PLUGIN plugin_info
                                  __attribute__((unused))) {
-  auth_ldap_common_deinit();
+  log_debug("auth_ldap_sasl_deinit()");
+
+  auth_ldap_common_deinit(connPool);
 
   auth_ldap_sasl_plugin_info = nullptr;
   return 0;
 }
 
-// Static var for System variables
-static char *authentication_ldap_sasl_bind_base_dn;
-static char *authentication_ldap_sasl_server_host;
-static unsigned int authentication_ldap_sasl_server_port;
-
 int alp_sasl_authenticate(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info) {
-  DBUG_ENTER("alp_sasl_authenticate");
-  alp::AuthLDAPSASL *obj =
-      new alp::AuthLDAPSASL(authentication_ldap_sasl_server_host,
-                            authentication_ldap_sasl_server_port,
-                            authentication_ldap_sasl_bind_base_dn);
-  return auth_ldap_common_authenticate_user(obj, vio, info);
+  log_debug("alp_sasl_authenticate()");
+
+  return auth_ldap_common_authenticate_user(connPool, vio, info, server_host,
+                                            server_port, ssl, tls, ca_path,
+                                            user_search_attr);
 }
-
-// System Variables
-static MYSQL_SYSVAR_STR(
-    bind_base_dn, authentication_ldap_sasl_bind_base_dn,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
-    "For SASL LDAP authentication, the base distinguished name (DN)",
-    nullptr /* check */, nullptr /* update */, nullptr /* default */);
-static MYSQL_SYSVAR_STR(server_host, authentication_ldap_sasl_server_host,
-                        PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
-                        "For SASL LDAP authentication, the LDAP server host",
-                        nullptr /* check */, nullptr /* update */,
-                        nullptr /* default */);
-static MYSQL_SYSVAR_UINT(
-    server_port, authentication_ldap_sasl_server_port, PLUGIN_VAR_RQCMDARG,
-    "For SASL LDAP authentication, the LDAP server TCP/IP port number",
-    nullptr /* check */, nullptr /* update */, 389 /* default */,
-    1 /*minimum */, 32376 /* maximum */, 0 /* blocksize */);
-
-static SYS_VAR *alp_sasl_sysvars[] = {MYSQL_SYSVAR(bind_base_dn),
-                                      MYSQL_SYSVAR(server_host),
-                                      MYSQL_SYSVAR(server_port), nullptr};
 
 // Plugin declaration
 struct st_mysql_auth alp_sasl_handler = {
@@ -92,7 +110,7 @@ mysql_declare_plugin(auth_ldap_sasl) {
       nullptr,                           /* no check function */
       0x0100,                            /* version = 1.0 */
       nullptr,                           /* no status variables */
-      alp_sasl_sysvars,                  /* system variables */
+      alp_sysvars,                       /* system variables */
       nullptr                            /* no reserved information */
 #if MYSQL_PLUGIN_INTERFACE_VERSION >= 0x103
       ,

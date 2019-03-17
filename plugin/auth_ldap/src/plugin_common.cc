@@ -13,68 +13,78 @@
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
 
-#include "plugin/auth_ldap/include/auth_ldap_base.h"
 #include "plugin/auth_ldap/include/plugin_common.h"
 
-// Plugin logging
-#include "mysql/components/my_service.h"
-#include "mysql/components/service_implementation.h"
-#include "mysql/components/services/log_builtins.h"
+#include "plugin/auth_ldap/include/plugin_log.h"
 
-static SERVICE_TYPE(registry) *reg_srv = nullptr;
-SERVICE_TYPE(log_builtins) *log_bi = nullptr;
-SERVICE_TYPE(log_builtins_string) *log_bs = nullptr;
+// static SERVICE_TYPE(registry) *reg_srv = nullptr;
+// SERVICE_TYPE(log_builtins) *log_bi = nullptr;
+// SERVICE_TYPE(log_builtins_string) *log_bs = nullptr;
 
 int auth_ldap_common_init() {
-  if (init_logging_service_for_plugin(&reg_srv, &log_bi, &log_bs)) return 1;
+  // if (init_logging_service_for_plugin(&reg_srv, &log_bi, &log_bs)) return 1;
 
   return 0;
 }
 
-int auth_ldap_common_deinit() {
-  deinit_logging_service_for_plugin(&reg_srv, &log_bi, &log_bs);
+int auth_ldap_common_deinit(alp::AuthLDAPConnectionPool *connPool) {
+  log_debug("Destroying LDAP connection pool");
+  delete connPool;
+
+  // deinit_logging_service_for_plugin(&reg_srv, &log_bi, &log_bs);
 
   return 0;
 }
 
-int auth_ldap_common_authenticate_user(alp::AuthLDAPBase *obj,
+int auth_ldap_common_authenticate_user(alp::AuthLDAPConnectionPool *connPool,
                                        MYSQL_PLUGIN_VIO *vio,
-                                       MYSQL_SERVER_AUTH_INFO *info) {
+                                       MYSQL_SERVER_AUTH_INFO *info,
+                                       const char *server_host,
+                                       unsigned int server_port, bool ssl,
+                                       bool tls, const char *ca_path,
+                                       const char *user_search_attr) {
   DBUG_ENTER("auth_ldap_common_authenticate_user");
 
+  // If the account explicitily name a user DN don't use this var
+  // If the account doesn't explicitily name a user DN use this var to perform
+  // the initial bind and search for the user DN
   /* send a password question */
   if (vio->write_packet(vio, (const unsigned char *)PASSWORD_QUESTION, 1)) {
-    LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG,
-                 "Failed to write password packet", info->user_name);
+    log_error("Failed to write password packet");
     DBUG_RETURN(CR_ERROR);
   }
 
-  unsigned char *password;
-  if ((vio->read_packet(vio, &password)) < 0) {
-    LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG,
-                 "Failed to read password packet");
+  unsigned char *upassword;
+  if ((vio->read_packet(vio, &upassword)) < 0) {
+    log_error("Failed to read password packet");
     DBUG_RETURN(CR_ERROR);
   }
   info->password_used = PASSWORD_USED_YES;
+  char *password = static_cast<char *>(static_cast<void *>(upassword));
+  // We don't need to free password memory
 
-  if (obj->prepare(info->user_name, info->auth_string,
-                   info->auth_string_length)) {
-    bool res = obj->bind(static_cast<char *>(static_cast<void *>(password)));
-    if (res) {
-      DBUG_RETURN(CR_OK);
-    } else {
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "LDAP bind unsuccessful");
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->error());
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, info->user_name);
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_uri());
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_dn());
-      LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->debug_default_dn());
-      DBUG_RETURN(CR_AUTH_USER_CREDENTIALS);
-    }
+  if (info->auth_string_length > 0) {
+    log_debug("Authenticating with auth_string %s", info->auth_string);
+    alp::AuthLDAPConnection *conn = new alp::AuthLDAPConnection(
+        STR_NULL(server_host), server_port, ssl, tls, STR_NULL(ca_path),
+        STR_NULL(info->auth_string), STR_NULL(user_search_attr),
+        STR_NULL(info->user_name), STR_NULL(password));
+    int res = conn->get_error();
+    delete conn;
+    DBUG_RETURN(res);
   } else {
-    LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, "Failed to prepare auth ldap");
-    LogPluginErr(ERROR_LEVEL, ER_LOG_PRINTF_MSG, obj->error());
-    DBUG_RETURN(CR_AUTH_PLUGIN_ERROR);
+    //log_debug("Authenticating with bind_root_dn %s", bind_root_dn);
+    alp::AuthLDAPConnection *conn = connPool->borrow();
+    if (conn == nullptr) {
+      // TODO: print error
+      DBUG_RETURN(CR_AUTH_PLUGIN_ERROR);
+    } else {
+      // TODO: search user
+      // TODO: bind as user
+      // TODO: get groups
+      conn->unborrow();
+      conn = nullptr;
+    }
   }
 
   MY_ASSERT_UNREACHABLE();

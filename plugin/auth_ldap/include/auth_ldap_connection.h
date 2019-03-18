@@ -16,6 +16,7 @@
 #define _AUTH_LDAP_CONNECTION_ALP_H
 
 #include <ctime>
+#include <list>
 #include <string>
 
 #include <ldap.h>
@@ -44,6 +45,11 @@ class AuthLDAPConnection {
   inline int get_error() { return this->error; }
   std::string search_dn(std::string user_name, std::string user_search_attr,
                         std::string base_dn);
+  std::list<std::string> search_group(std::string user_name,
+                                      std::string bind_user,
+                                      std::string group_search_attr,
+                                      std::string group_search_filter,
+                                      std::string base_dn);
   inline void unborrow() { this->borrowed = false; };
 
  private:

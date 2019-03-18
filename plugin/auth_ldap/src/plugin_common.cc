@@ -14,8 +14,10 @@
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
 
 #include "plugin/auth_ldap/include/plugin_common.h"
-
 #include "plugin/auth_ldap/include/plugin_log.h"
+
+#include <list>
+#include <string>
 
 // static SERVICE_TYPE(registry) *reg_srv = nullptr;
 // SERVICE_TYPE(log_builtins) *log_bi = nullptr;
@@ -40,7 +42,8 @@ int auth_ldap_common_authenticate_user(
     alp::AuthLDAPConnectionPool *connPool, MYSQL_PLUGIN_VIO *vio,
     MYSQL_SERVER_AUTH_INFO *info, const char *server_host,
     unsigned int server_port, bool ssl, bool tls, const char *ca_path,
-    const char *user_search_attr, const char *base_dn) {
+    const char *user_search_attr, const char *group_search_attr,
+    const char *group_search_filter, const char *base_dn) {
   DBUG_ENTER("auth_ldap_common_authenticate_user");
 
   // If the account explicitily name a user DN don't use this var
@@ -61,7 +64,11 @@ int auth_ldap_common_authenticate_user(
   char *password = static_cast<char *>(static_cast<void *>(upassword));
   // We don't need to free password memory
 
+  log_error("Username: %s Authenticated_as: %s", info->user_name,
+            info->authenticated_as);
+
   if (info->auth_string_length > 0) {
+    // TODO: CREATE USER ''@'%'  IDENTIFIED WITH authentication_ldap_sasl  BY '+ou=People,dc=example,dc=com#grp1=usera,grp2,grp3=userc';
     log_debug("Authenticating with auth_string %s", info->auth_string);
     alp::AuthLDAPConnection *conn = new alp::AuthLDAPConnection(
         STR_NULL(server_host), server_port, ssl, tls, STR_NULL(ca_path),
@@ -89,9 +96,28 @@ int auth_ldap_common_authenticate_user(
         log_debug("User DN found %s", bind_user.c_str());
         if (conn->bind(bind_user, STR_NULL(password)) == CR_OK) {
           log_debug("User validated");
-          // TODO: get groups
-          conn->unborrow();
-          DBUG_RETURN(CR_OK);
+          if (strlen(info->authenticated_as) == 0) {
+            log_debug("Authenticating with proxy user");
+            std::list<std::string> groups = conn->search_group(
+                info->user_name, bind_user, STR_NULL(group_search_attr),
+                STR_NULL(group_search_filter), STR_NULL(base_dn));
+            // If we are here, is because we haven't specified a group priority
+            // Login will success only if the list returns 1 group only
+            if(groups.size() == 1) {
+              // TODO: what happens if the group doesn't map to a mysql user??
+              log_debug("User maps to 1 group %s", groups.front().c_str());
+              strcpy(info->authenticated_as, groups.front().c_str());
+              conn->unborrow();
+              DBUG_RETURN(CR_OK);
+            } else {
+              log_debug("User maps to 0 or more than 1 group");
+              conn->unborrow();
+              DBUG_RETURN(CR_AUTH_USER_CREDENTIALS);
+            }
+          } else {
+            conn->unborrow();
+            DBUG_RETURN(CR_OK);
+          }
         } else {
           log_warn("Couldn't login as specified user %s", info->user_name);
           conn->unborrow();

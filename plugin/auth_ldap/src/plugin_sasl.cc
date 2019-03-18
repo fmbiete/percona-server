@@ -80,9 +80,9 @@ static int auth_ldap_sasl_deinit(MYSQL_PLUGIN plugin_info
 int alp_sasl_authenticate(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info) {
   log_debug("alp_sasl_authenticate()");
 
-  return auth_ldap_common_authenticate_user(connPool, vio, info, server_host,
-                                            server_port, ssl, tls, ca_path,
-                                            user_search_attr, bind_base_dn);
+  return auth_ldap_common_authenticate_user(
+      connPool, vio, info, server_host, server_port, ssl, tls, ca_path,
+      user_search_attr, group_search_attr, group_search_filter, bind_base_dn);
 }
 
 // Plugin declaration

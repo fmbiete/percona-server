@@ -31,6 +31,7 @@ class AuthLDAPConnection {
                      bool ssl, bool tls, std::string ca_path,
                      std::string bind_dn, std::string bind_pwd);
   ~AuthLDAPConnection();
+  int bind(std::string bind_dn, std::string bind_pwd);
   inline AuthLDAPConnection *borrow() {
     this->borrowed = true;
     this->borrowed_ts = std::time(nullptr);
@@ -41,10 +42,11 @@ class AuthLDAPConnection {
   };
   inline bool is_borrowed() { return this->borrowed; }
   inline int get_error() { return this->error; }
+  std::string search_dn(std::string user_name, std::string user_search_attr,
+                        std::string base_dn);
   inline void unborrow() { this->borrowed = false; };
 
  private:
-  int bind(std::string bind_dn, std::string bind_pwd);
   std::string getLDAPBind(std::string bind_user, std::string uid_attr,
                           std::string user_name);
   std::string getLDAPUri(std::string server_host, unsigned int server_port,

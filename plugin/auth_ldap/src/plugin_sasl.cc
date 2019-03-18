@@ -59,10 +59,8 @@ static int auth_ldap_sasl_init(MYSQL_PLUGIN plugin_info) {
   log_debug("ca_path %s", ca_path);
   log_debug("auth_method_name %s", auth_method_name);
   connPool = new alp::AuthLDAPConnectionPool(
-      init_pool_size, max_pool_size, server_host == nullptr ? "" : server_host,
-      server_port, ssl, tls, bind_root_dn == nullptr ? "" : bind_root_dn,
-      bind_root_pwd == nullptr ? "" : bind_root_pwd,
-      ca_path == nullptr ? "" : ca_path);
+      init_pool_size, max_pool_size, STR_NULL(server_host), server_port, ssl,
+      tls, STR_NULL(bind_root_dn), STR_NULL(bind_root_pwd), STR_NULL(ca_path));
 
   log_info("Plugin initialized");
 
@@ -84,7 +82,7 @@ int alp_sasl_authenticate(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info) {
 
   return auth_ldap_common_authenticate_user(connPool, vio, info, server_host,
                                             server_port, ssl, tls, ca_path,
-                                            user_search_attr);
+                                            user_search_attr, bind_base_dn);
 }
 
 // Plugin declaration

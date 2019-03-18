@@ -53,6 +53,49 @@ AuthLDAPConnection::~AuthLDAPConnection() {
   }
 }
 
+std::string AuthLDAPConnection::search_dn(std::string user_name,
+                                          std::string user_search_attr,
+                                          std::string base_dn) {
+  std::string str;
+  std::string filter = user_search_attr + "=" + user_name;
+
+  LDAPMessage *res;
+  char *attrs[] = {"dn", nullptr};
+  struct timeval search_timeout;
+  memset(&search_timeout, 0, sizeof(struct timeval));
+  search_timeout.tv_sec = 5;
+  int searchlimit = 1;
+  int err = ldap_search_ext_s(
+      this->ldap, base_dn.c_str() /* base */, LDAP_SCOPE_SUBTREE /*scope*/,
+      filter.c_str() /*filter*/, attrs /*attrs*/, 0 /*attrsonly*/,
+      nullptr /*serverctrls*/, nullptr /*clientctrls*/,
+      &search_timeout /*timeout*/, searchlimit /*searchlimit*/,
+      &res /*ldapmessage*/);
+  if (err == LDAP_SUCCESS) {
+    // Verify an entry was found
+    if (ldap_count_entries(this->ldap, res) == 0) {
+      log_warn("ldap_search_ext_s(%s, %s) returned no matching entries",
+               base_dn.c_str(), filter.c_str());
+      // Only free up res if there are no items
+      ldap_msgfree(res);
+      res = nullptr;
+    } else {
+      LDAPMessage *entry = ldap_first_entry(this->ldap, res);
+      char *dn = ldap_get_dn(this->ldap, entry);
+      log_debug("ldap_search_ext_s(%s, %s): %s", base_dn.c_str(),
+                filter.c_str(), dn);
+      str = dn;
+      ldap_memfree(dn);
+      ldap_memfree(entry);
+    }
+  } else {
+    log_error("ERROR: ldap_search_ext_s(%s, %s) %s", base_dn.c_str(),
+              filter.c_str(), ldap_err2string(err));
+  }
+
+  return str;
+}
+
 int AuthLDAPConnection::bind(std::string bind_dn, std::string bind_pwd) {
   if (bind_dn.empty() || bind_pwd.empty()) {
     // log_error("Error; trying to bind to an empty dn or password");

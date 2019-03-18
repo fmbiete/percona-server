@@ -1,2 +1,3 @@
-## SASL
-the server certificate won't be validated unless ca_path is set
+## Notes:
+- The server certificate won't be validated unless ca_path is set.
+- TLS won't work over the SSL port ()

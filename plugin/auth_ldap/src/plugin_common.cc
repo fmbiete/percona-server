@@ -36,13 +36,11 @@ int auth_ldap_common_deinit(alp::AuthLDAPConnectionPool *connPool) {
   return 0;
 }
 
-int auth_ldap_common_authenticate_user(alp::AuthLDAPConnectionPool *connPool,
-                                       MYSQL_PLUGIN_VIO *vio,
-                                       MYSQL_SERVER_AUTH_INFO *info,
-                                       const char *server_host,
-                                       unsigned int server_port, bool ssl,
-                                       bool tls, const char *ca_path,
-                                       const char *user_search_attr) {
+int auth_ldap_common_authenticate_user(
+    alp::AuthLDAPConnectionPool *connPool, MYSQL_PLUGIN_VIO *vio,
+    MYSQL_SERVER_AUTH_INFO *info, const char *server_host,
+    unsigned int server_port, bool ssl, bool tls, const char *ca_path,
+    const char *user_search_attr, const char *base_dn) {
   DBUG_ENTER("auth_ldap_common_authenticate_user");
 
   // If the account explicitily name a user DN don't use this var
@@ -73,17 +71,33 @@ int auth_ldap_common_authenticate_user(alp::AuthLDAPConnectionPool *connPool,
     delete conn;
     DBUG_RETURN(res);
   } else {
-    //log_debug("Authenticating with bind_root_dn %s", bind_root_dn);
+    // log_debug("Authenticating with bind_root_dn %s", bind_root_dn);
     alp::AuthLDAPConnection *conn = connPool->borrow();
     if (conn == nullptr) {
-      // TODO: print error
+      log_error("Couldn't get an available LDAP connection from the pool");
+      // TODO: print pool debug info
       DBUG_RETURN(CR_AUTH_PLUGIN_ERROR);
     } else {
-      // TODO: search user
-      // TODO: bind as user
-      // TODO: get groups
-      conn->unborrow();
-      conn = nullptr;
+      std::string bind_user =
+          conn->search_dn(STR_NULL(info->user_name), STR_NULL(user_search_attr),
+                          STR_NULL(base_dn));
+      if (bind_user.empty()) {
+        log_warn("Coulnd't find the specified user %s", info->user_name);
+        conn->unborrow();
+        DBUG_RETURN(CR_AUTH_USER_CREDENTIALS);
+      } else {
+        log_debug("User DN found %s", bind_user.c_str());
+        if (conn->bind(bind_user, STR_NULL(password)) == CR_OK) {
+          log_debug("User validated");
+          // TODO: get groups
+          conn->unborrow();
+          DBUG_RETURN(CR_OK);
+        } else {
+          log_warn("Couldn't login as specified user %s", info->user_name);
+          conn->unborrow();
+          DBUG_RETURN(CR_AUTH_USER_CREDENTIALS);
+        }
+      }
     }
   }
 

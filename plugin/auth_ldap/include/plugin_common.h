@@ -41,13 +41,11 @@
 int auth_ldap_common_init();
 int auth_ldap_common_deinit(alp::AuthLDAPConnectionPool *connPool);
 
-int auth_ldap_common_authenticate_user(alp::AuthLDAPConnectionPool *connPool,
-                                       MYSQL_PLUGIN_VIO *vio,
-                                       MYSQL_SERVER_AUTH_INFO *info,
-                                       const char *server_host,
-                                       unsigned int server_port, bool ssl,
-                                       bool tls, const char *ca_path,
-                                       const char *user_search_attr);
+int auth_ldap_common_authenticate_user(
+    alp::AuthLDAPConnectionPool *connPool, MYSQL_PLUGIN_VIO *vio,
+    MYSQL_SERVER_AUTH_INFO *info, const char *server_host,
+    unsigned int server_port, bool ssl, bool tls, const char *ca_path,
+    const char *user_search_attr, const char *base_dn);
 
 int auth_ldap_common_generate_auth_string_hash(char *outbuf,
                                                unsigned int *buflen,

@@ -18,35 +18,17 @@
 #include <iostream>
 #include <regex>
 
-// Forward declaration??
-#define CR_AUTH_PLUGIN_ERROR 3
-#define CR_AUTH_HANDSHAKE 2
-#define CR_AUTH_USER_CREDENTIALS 1
-#define CR_ERROR 0
-#define CR_OK -1
-
 namespace alp {
-AuthLDAPConnection::AuthLDAPConnection(
-    std::string server_host, unsigned int server_port, bool ssl, bool tls,
-    std::string ca_path, std::string bind_user, std::string uid_attr,
-    std::string user_name, std::string bind_pwd) {
-  this->ldap = nullptr;
-  if ((this->error = initiate(server_host, server_port, ssl, tls, ca_path)) ==
-      CR_OK) {
-    std::string bind_dn = getLDAPBind(bind_user, uid_attr, user_name);
-    this->error = bind(bind_dn, bind_pwd);
-  }
-}
-
 AuthLDAPConnection::AuthLDAPConnection(std::string server_host,
                                        unsigned int server_port, bool ssl,
                                        bool tls, std::string ca_path,
-                                       std::string bind_dn,
+                                       bool initial_bind, std::string bind_dn,
                                        std::string bind_pwd) {
   this->ldap = nullptr;
-  if ((this->error = initiate(server_host, server_port, ssl, tls, ca_path)) ==
-      CR_OK) {
-    this->error = bind(bind_dn, bind_pwd);
+  if (initiate(server_host, server_port, ssl, tls, ca_path)) {
+    if (initial_bind) {
+      bind(bind_dn, bind_pwd);
+    }
   }
 }
 
@@ -56,10 +38,10 @@ AuthLDAPConnection::~AuthLDAPConnection() {
   }
 }
 
-int AuthLDAPConnection::bind(std::string bind_dn, std::string bind_pwd) {
+bool AuthLDAPConnection::bind(std::string bind_dn, std::string bind_pwd) {
   if (bind_dn.empty() || bind_pwd.empty()) {
     // log_error("Error; trying to bind to an empty dn or password");
-    return CR_AUTH_PLUGIN_ERROR;
+    return false;
   }
 
   struct berval *serverCreds;
@@ -70,10 +52,10 @@ int AuthLDAPConnection::bind(std::string bind_dn, std::string bind_pwd) {
                              userCreds, nullptr, nullptr, &serverCreds);
   if (err != LDAP_SUCCESS) {
     log_warn("Unsuccesful bind: ldap_sasl_bind_s %s", ldap_err2string(err));
-    return CR_AUTH_USER_CREDENTIALS;
+    return false;
   }
 
-  return CR_OK;
+  return true;
 }
 
 std::string AuthLDAPConnection::getLDAPBind(std::string bind_base_dn,
@@ -99,24 +81,22 @@ std::string AuthLDAPConnection::getLDAPUri(std::string server_host,
       .append(std::to_string(server_port));
 }
 
-int AuthLDAPConnection::initiate(std::string server_host,
-                                 unsigned int server_port, bool ssl, bool tls,
-                                 std::string ca_path) {
+bool AuthLDAPConnection::initiate(std::string server_host,
+                                  unsigned int server_port, bool ssl, bool tls,
+                                  std::string ca_path) {
   this->created_ts = std::time(nullptr);
   this->borrowed = false;
 
   if (server_host.empty()) {
     // log_error("ERROR: server_host is empty");
-    return CR_AUTH_PLUGIN_ERROR;
+    return false;
   }
 
-  int err;
-
-  err = ldap_initialize(&(this->ldap),
-                        getLDAPUri(server_host, server_port, ssl).c_str());
+  int err = ldap_initialize(&(this->ldap),
+                            getLDAPUri(server_host, server_port, ssl).c_str());
   if (err != LDAP_SUCCESS) {
     log_error("ERROR: ldap_initialize %s", ldap_err2string(err));
-    return CR_AUTH_PLUGIN_ERROR;
+    return false;
   }
 
   int version = LDAP_VERSION3;
@@ -124,7 +104,7 @@ int AuthLDAPConnection::initiate(std::string server_host,
   if (err != LDAP_OPT_SUCCESS) {
     log_error("ERROR: ldap_set_option(LDAP_OPT_PROTOCOL_VERSION) %s",
               ldap_err2string(err));
-    return CR_AUTH_PLUGIN_ERROR;
+    return false;
   }
 
   ldap_set_option(this->ldap, LDAP_OPT_REFERRALS, LDAP_OPT_OFF);
@@ -135,7 +115,7 @@ int AuthLDAPConnection::initiate(std::string server_host,
     if (err != LDAP_OPT_SUCCESS) {
       log_error("ERROR: ldap_set_option(LDAP_OPT_X_TLS_REQUIRE_CERT) %s",
                 ldap_err2string(err));
-      return CR_AUTH_PLUGIN_ERROR;
+      return false;
     }
   } else {
     char *cca_path = strdup(ca_path.c_str());
@@ -145,7 +125,7 @@ int AuthLDAPConnection::initiate(std::string server_host,
     if (err != LDAP_OPT_SUCCESS) {
       log_error("ERROR: ldap_set_option(LDAP_OPT_X_TLS_CACERTFILE) %s",
                 ldap_err2string(err));
-      return CR_AUTH_PLUGIN_ERROR;
+      return false;
     }
   }
 
@@ -154,18 +134,18 @@ int AuthLDAPConnection::initiate(std::string server_host,
   if (err != LDAP_OPT_SUCCESS) {
     log_error("ERROR: ldap_set_option(LDAP_OPT_X_TLS_NEWCTX) %s",
               ldap_err2string(err));
-    return CR_AUTH_PLUGIN_ERROR;
+    return false;
   }
 
   if (tls) {
     err = ldap_start_tls_s(this->ldap, nullptr, nullptr);
     if (err != LDAP_SUCCESS) {
       log_error("ERROR: ldap_start_tls_s %s", ldap_err2string(err));
-      return CR_AUTH_PLUGIN_ERROR;
+      return false;
     }
   }
 
-  return CR_OK;
+  return true;
 }
 
 std::string AuthLDAPConnection::search_dn(std::string user_name,
@@ -211,14 +191,14 @@ std::string AuthLDAPConnection::search_dn(std::string user_name,
   return str;
 }
 
-std::list<std::string> AuthLDAPConnection::search_group(
-    std::string user_name, std::string bind_user, std::string group_search_attr,
+std::list<std::string> AuthLDAPConnection::search_groups(
+    std::string user_name, std::string user_dn, std::string group_search_attr,
     std::string group_search_filter, std::string base_dn) {
   std::list<std::string> list;
-  std::string filter =
-      std::regex_replace(group_search_filter, std::regex("\\{UA\\}"), user_name);
-  filter = std::regex_replace(filter, std::regex("\\{UD\\}"), bind_user);
-  log_error("filter: %s", filter.c_str());
+  std::string filter = std::regex_replace(group_search_filter,
+                                          std::regex("\\{UA\\}"), user_name);
+  filter = std::regex_replace(filter, std::regex("\\{UD\\}"), user_dn);
+  log_debug("search_groups() - filter: %s", filter.c_str());
 
   LDAPMessage *res;
   char *attrs[] = {strdup(group_search_attr.c_str()), nullptr};

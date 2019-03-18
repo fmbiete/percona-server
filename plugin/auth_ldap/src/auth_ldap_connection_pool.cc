@@ -30,6 +30,12 @@ AuthLDAPConnectionPool::AuthLDAPConnectionPool(
 
 AuthLDAPConnectionPool::~AuthLDAPConnectionPool() { destroy_all(); }
 
+void AuthLDAPConnectionPool::debug_info() {
+  log_debug("server_host [%s] server_port [%d]", server_host.c_str(), server_port);
+  log_debug("ssl [%d] tls [%d] ca_path [%s]", ssl, tls, ca_path.c_str());
+  log_debug("bind_dn [%s]", bind_dn.c_str());
+}
+
 void AuthLDAPConnectionPool::reconfigure(
     unsigned int initsize, unsigned int maxsize, std::string server_host,
     unsigned int server_port, bool ssl, bool tls, std::string bind_dn,
@@ -48,7 +54,7 @@ void AuthLDAPConnectionPool::reconfigure(
     this->bind_dn = bind_dn;
     this->bind_pwd = bind_pwd;
     this->ca_path = ca_path;
-    
+
     // Create a new pool of connections
     for (unsigned int i = 0; i < initsize; i++) {
       create_connection(false);
@@ -67,7 +73,7 @@ void AuthLDAPConnectionPool::reconfigure(
   this->maxsize = maxsize;
 }
 
-AuthLDAPConnection *AuthLDAPConnectionPool::borrow() {
+AuthLDAPConnection *AuthLDAPConnectionPool::getConnection() {
   AuthLDAPConnection *obj = nullptr;
   for (AuthLDAPConnection *con : this->list) {
     if (obj == nullptr) {
@@ -95,6 +101,13 @@ AuthLDAPConnection *AuthLDAPConnectionPool::borrow() {
   return obj;
 }
 
+AuthLDAPConnection *AuthLDAPConnectionPool::newConnection(bool initial_bind) {
+  AuthLDAPConnection *obj =
+      new AuthLDAPConnection(server_host, server_port, ssl, tls, ca_path,
+                             initial_bind, bind_dn, bind_pwd);
+  return obj;
+}
+
 void AuthLDAPConnectionPool::adjust_size(unsigned int maxsize) {
   if (this->list.size() > maxsize) {
     int to_remove = this->list.size() - maxsize;
@@ -113,8 +126,7 @@ void AuthLDAPConnectionPool::adjust_size(unsigned int maxsize) {
 }
 
 AuthLDAPConnection *AuthLDAPConnectionPool::create_connection(bool borrow) {
-  AuthLDAPConnection *obj = new AuthLDAPConnection(server_host, server_port,
-                                                   ssl, tls, ca_path, bind_dn, bind_pwd);
+  AuthLDAPConnection *obj = this->newConnection(true);
   if (borrow) obj->borrow();
   this->list.push_back(obj);
   return obj;

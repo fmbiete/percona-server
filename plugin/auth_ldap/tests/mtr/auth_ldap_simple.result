@@ -16,6 +16,7 @@ authentication_ldap_simple_log_status	1
 authentication_ldap_simple_max_pool_size	1000
 authentication_ldap_simple_server_host	
 authentication_ldap_simple_server_port	389
+authentication_ldap_simple_ssl	OFF
 authentication_ldap_simple_tls	OFF
 authentication_ldap_simple_user_search_attr	uid
 SET GLOBAL authentication_ldap_simple_bind_base_dn = 'cn=users,cn=accounts,dc=example,dc=test';
@@ -35,6 +36,7 @@ authentication_ldap_simple_log_status	1
 authentication_ldap_simple_max_pool_size	1000
 authentication_ldap_simple_server_host	freeipa
 authentication_ldap_simple_server_port	389
+authentication_ldap_simple_ssl	OFF
 authentication_ldap_simple_tls	OFF
 authentication_ldap_simple_user_search_attr	uid
 CREATE USER user1 IDENTIFIED WITH authentication_ldap_simple BY 'uid=user1,cn=users,cn=accounts,dc=example,dc=test';

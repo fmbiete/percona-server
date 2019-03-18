@@ -25,14 +25,17 @@ class AuthLDAPConnectionPool {
  public:
   AuthLDAPConnectionPool(unsigned int initsize, unsigned int maxsize,
                          std::string server_host, unsigned int server_port,
-                         bool ssl, bool tls, std::string bind_dn, std::string bind_pwd,
-                         std::string ca_path);
+                         bool ssl, bool tls, std::string bind_dn,
+                         std::string bind_pwd, std::string ca_path);
   ~AuthLDAPConnectionPool();
+  void debug_info();
+  AuthLDAPConnection *getConnection();
+  AuthLDAPConnection *newConnection(bool initial_bind);
+  inline int max_size() { return this->maxsize; }
   void reconfigure(unsigned int initsize, unsigned int maxsize,
-                   std::string server_host, unsigned int server_port, bool ss, bool tls,
-                   std::string bind_dn, std::string bind_pwd,
+                   std::string server_host, unsigned int server_port, bool ss,
+                   bool tls, std::string bind_dn, std::string bind_pwd,
                    std::string ca_path);
-  AuthLDAPConnection *borrow();
 
  private:
   void adjust_size(unsigned int maxsize);

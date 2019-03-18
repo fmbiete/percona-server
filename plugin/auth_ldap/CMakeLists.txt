@@ -15,6 +15,7 @@
 IF(WITH_LDAP)
   INCLUDE (CheckLibraryExists)
   CHECK_LIBRARY_EXISTS(ldap ldap_initialize "" HAVE_LDAP)
+
   IF(NOT HAVE_LDAP)
   	MESSAGE(FATAL_ERROR "Required LDAP dev library not found. Please install LDAP development files!")
   ENDIF(NOT HAVE_LDAP)
@@ -36,7 +37,9 @@ IF(WITH_LDAP)
     )
     ### Configuration ###
     ADD_DEFINITIONS(-DLOG_COMPONENT_TAG="auth_ldap")
-    #ADD_DEFINITIONS(-DLDAP_DEPRECATED=1)
+
+    INCLUDE_DIRECTORIES(SYSTEM ${BOOST_PATCHES_DIR} ${BOOST_INCLUDE_DIR})
+
     MYSQL_ADD_PLUGIN(authentication_ldap_sasl ${ALP_SOURCES_SASL} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "authentication_ldap_sasl")
     MYSQL_ADD_PLUGIN(authentication_ldap_simple ${ALP_SOURCES_SIMPLE} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "authentication_ldap_simple")
 

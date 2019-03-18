@@ -26,13 +26,22 @@ static MYSQL_PLUGIN *alp_plugin;
 
 void alp_log(const unsigned int level, const char *fmt, ...) {
   if (level <= alp_log_status) {
-    enum plugin_log_level my_level = MY_INFORMATION_LEVEL;
+    // enum plugin_log_level my_level = MY_INFORMATION_LEVEL;
+    std::string my_level;
     switch (level) {
       case ALP_LOG_ERR:
-        my_level = MY_ERROR_LEVEL;
+        // my_level = MY_ERROR_LEVEL;
+        my_level = "ERROR";
         break;
       case ALP_LOG_WARN:
-        my_level = MY_WARNING_LEVEL;
+        // my_level = MY_WARNING_LEVEL;
+        my_level = "WARNING";
+        break;
+      case ALP_LOG_DBUG:
+        my_level = "DEBUG";
+        break;
+      default:
+        my_level = "INFO";
         break;
     }
     // alp_plugin.name.str
@@ -43,14 +52,19 @@ void alp_log(const unsigned int level, const char *fmt, ...) {
     vsnprintf(msg, sizeof(msg) - 1, fmt, args);
     va_end(args);
 
-    // FIXME: warning: format not a string literal and no format arguments [-Wformat-security]
-    my_plugin_log_message(alp_plugin, my_level, msg);
+    // FIXME: warning: format not a string literal and no format arguments
+    // [-Wformat-security]
+    // my_plugin_log_message(alp_plugin, my_level, msg);
+    struct st_plugin_int *plugin = static_cast<st_plugin_int *>(*alp_plugin);
+    // FIXME: segfault on accessing plugin name; it's only storing the value for the first plugin to call login
+    //std::cerr << "[" << plugin->name.str << "] - (" << my_level << ") - " << msg
+    std::cerr << "[auth_ldap] - (" << my_level << ") - " << msg
+              << std::endl;
   }
 }
 
 void set_alp_log_plugin(MYSQL_PLUGIN *plugin) { alp_plugin = plugin; }
 
 void set_alp_log_status(unsigned int log_status) {
-  //std::cerr << "alp_log_status " << alp_log_status << " " << log_status << '\n';
   alp_log_status = log_status;
 }

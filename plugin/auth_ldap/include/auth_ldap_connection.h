@@ -25,14 +25,10 @@ namespace alp {
 class AuthLDAPConnection {
  public:
   AuthLDAPConnection(std::string server_host, unsigned int server_port,
-                     bool ssl, bool tls, std::string ca_path,
-                     std::string bind_user, std::string uid_attr,
-                     std::string user_name, std::string bind_pwd);
-  AuthLDAPConnection(std::string server_host, unsigned int server_port,
-                     bool ssl, bool tls, std::string ca_path,
+                     bool ssl, bool tls, std::string ca_path, bool initial_bind,
                      std::string bind_dn, std::string bind_pwd);
   ~AuthLDAPConnection();
-  int bind(std::string bind_dn, std::string bind_pwd);
+  bool bind(std::string bind_dn, std::string bind_pwd);
   inline AuthLDAPConnection *borrow() {
     this->borrowed = true;
     this->borrowed_ts = std::time(nullptr);
@@ -45,7 +41,7 @@ class AuthLDAPConnection {
   inline int get_error() { return this->error; }
   std::string search_dn(std::string user_name, std::string user_search_attr,
                         std::string base_dn);
-  std::list<std::string> search_group(std::string user_name,
+  std::list<std::string> search_groups(std::string user_name,
                                       std::string bind_user,
                                       std::string group_search_attr,
                                       std::string group_search_filter,
@@ -57,7 +53,7 @@ class AuthLDAPConnection {
                           std::string user_name);
   std::string getLDAPUri(std::string server_host, unsigned int server_port,
                          bool ssl);
-  int initiate(std::string server_host, unsigned int server_port, bool ssl,
+  bool initiate(std::string server_host, unsigned int server_port, bool ssl,
                bool tls, std::string ca_path);
 
  private:

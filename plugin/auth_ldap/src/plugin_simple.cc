@@ -23,12 +23,24 @@
 
 MYSQL_PLUGIN auth_ldap_simple_plugin_info;
 
+// Declaration to access the name of the SYS_VAR
+struct SYS_VAR {
+  MYSQL_PLUGIN_VAR_HEADER;
+};
+
 template <typename Copy_type>
-void update_sysvar(THD *, SYS_VAR *, void *tgt, const void *save) {
-  *(Copy_type *)tgt = *(Copy_type *)save;
-  connPool->reconfigure(init_pool_size, max_pool_size, STR_NULL(server_host),
-                        server_port, ssl, tls, STR_NULL(bind_root_dn),
-                        STR_NULL(bind_root_pwd), STR_NULL(ca_path));
+void update_sysvar(THD *, SYS_VAR *var, void *var_ptr, const void *value) {
+  // Update the value
+  *(Copy_type *)var_ptr = *(Copy_type *)value;
+
+  if (strcmp(var->name, "authentication_ldap_simple_log_status") == 0)
+    set_alp_log_status(log_status);
+  else {
+    connPool->reconfigure(init_pool_size, max_pool_size, STR_NULL(server_host),
+                          server_port, ssl, tls, STR_NULL(bind_root_dn),
+                          STR_NULL(bind_root_pwd), STR_NULL(ca_path));
+    //connPool->debug_info();
+  }
 }
 
 static int auth_ldap_simple_init(MYSQL_PLUGIN plugin_info) {
@@ -37,18 +49,10 @@ static int auth_ldap_simple_init(MYSQL_PLUGIN plugin_info) {
   log_debug("auth_ldap_simple_init()");
 
   log_debug("Creating LDAP connection pool");
-  log_debug("init_pool_size %d", init_pool_size);
-  log_debug("max_pool_size %d", max_pool_size);
-  log_debug("server_host %s", server_host);
-  log_debug("server_port %d", server_port);
-  log_debug("tls %d", tls);
-  log_debug("bind_root_dn %s", bind_root_dn);
-  log_debug("bind_root_pwd %s", bind_root_pwd);
-  log_debug("ca_path %s", ca_path);
-  log_debug("auth_method_name %s", auth_method_name);
   connPool = new alp::AuthLDAPConnectionPool(
       init_pool_size, max_pool_size, STR_NULL(server_host), server_port, ssl,
       tls, STR_NULL(bind_root_dn), STR_NULL(bind_root_pwd), STR_NULL(ca_path));
+  connPool->debug_info();
 
   auth_ldap_simple_plugin_info = plugin_info;
   log_info("Plugin initialized");
@@ -70,9 +74,9 @@ int alp_simple_authenticate(MYSQL_PLUGIN_VIO *vio,
                             MYSQL_SERVER_AUTH_INFO *info) {
   log_debug("alp_simple_authenticate()");
 
-  return auth_ldap_common_authenticate_user(
-      connPool, vio, info, server_host, server_port, ssl, tls, ca_path,
-      user_search_attr, group_search_attr, group_search_filter, bind_base_dn);
+  return auth_ldap_common_authenticate_user(vio, info, connPool,
+                                            user_search_attr, group_search_attr,
+                                            group_search_filter, bind_base_dn);
 }
 
 // Plugin declaration

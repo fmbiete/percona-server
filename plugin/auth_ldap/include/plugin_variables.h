@@ -17,7 +17,6 @@
 
 #include "plugin/auth_ldap/include/auth_ldap_connection_pool.h"
 #include "plugin/auth_ldap/include/plugin_common.h"
-#include "plugin/auth_ldap/include/plugin_log.h"
 
 struct SYS_VAR;
 
@@ -35,7 +34,7 @@ static char *ca_path;
 static char *group_search_attr;
 static char *group_search_filter;
 static unsigned int init_pool_size;
-static unsigned int log_status;
+static int log_status;
 static unsigned int max_pool_size;
 static char *server_host;
 static unsigned int server_port;
@@ -54,11 +53,11 @@ static MYSQL_SYSVAR_STR(auth_method_name, auth_method_name,
                         "The authentication method name", nullptr /* check */,
                         &update_sysvar<char *> /* update */,
                         "SIMPLE" /* default */);
-static MYSQL_SYSVAR_STR(
-    //  + short name
-    bind_base_dn, bind_base_dn, PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
-    "The base distinguished name (DN)", nullptr /* check */,
-    &update_sysvar<char *> /* update */, nullptr /* default */);
+static MYSQL_SYSVAR_STR(bind_base_dn, bind_base_dn,
+                        PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
+                        "The base distinguished name (DN)", nullptr /* check */,
+                        &update_sysvar<char *> /* update */,
+                        nullptr /* default */);
 static MYSQL_SYSVAR_STR(bind_root_dn, bind_root_dn,
                         PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
                         "The root distinguished name (DN)", nullptr /* check */,
@@ -105,7 +104,7 @@ static MYSQL_SYSVAR_UINT(max_pool_size, max_pool_size, PLUGIN_VAR_RQCMDARG,
                          &update_sysvar<unsigned int> /* update */,
                          1000 /* default */, 0 /*minimum */,
                          32767 /* maximum */, 0 /* blocksize */);
-static MYSQL_SYSVAR_UINT(log_status, log_status, PLUGIN_VAR_RQCMDARG,
+static MYSQL_SYSVAR_INT(log_status, log_status, PLUGIN_VAR_RQCMDARG,
                          "The logging level", nullptr /* check */,
                          &update_sysvar<unsigned int> /* update */,
                          1 /* default */, 1 /*minimum */, 5 /* maximum */,

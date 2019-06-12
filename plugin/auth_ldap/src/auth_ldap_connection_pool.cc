@@ -31,9 +31,15 @@ AuthLDAPConnectionPool::AuthLDAPConnectionPool(
 AuthLDAPConnectionPool::~AuthLDAPConnectionPool() { destroy_all(); }
 
 void AuthLDAPConnectionPool::debug_info() {
-  log_debug("server_host [%s] server_port [%d]", server_host.c_str(), server_port);
-  log_debug("ssl [%d] tls [%d] ca_path [%s]", ssl, tls, ca_path.c_str());
-  log_debug("bind_dn [%s]", bind_dn.c_str());
+  std::stringstream log_stream;
+  log_stream << "server_host [" << server_host << "] server_port ["
+             << server_port << "]";
+  log_srv_dbg(log_stream.str());
+  log_stream << "ssl [" << ssl << "] tls [" << tls << "] ca_path [" << ca_path
+             << "]";
+  log_srv_dbg(log_stream.str());
+  log_stream << "bind_dn [" << bind_dn << "]";
+  log_srv_dbg(log_stream.str());
 }
 
 void AuthLDAPConnectionPool::reconfigure(
@@ -44,6 +50,7 @@ void AuthLDAPConnectionPool::reconfigure(
       this->server_host != server_host || this->ssl != ssl ||
       this->tls != tls || this->bind_dn != bind_dn ||
       this->bind_pwd != bind_pwd) {
+    log_srv_dbg("Recreating connection pool");
     // Destroy all the connections
     destroy_all();
 
@@ -60,6 +67,7 @@ void AuthLDAPConnectionPool::reconfigure(
       create_connection(false);
     }
   } else {
+    log_srv_dbg("Adjusting connection pool size");
     if (this->list.size() < initsize) {
       // Create elements and add to the list
       for (unsigned int i = this->list.size(); i < initsize; i++) {
@@ -73,7 +81,7 @@ void AuthLDAPConnectionPool::reconfigure(
   this->maxsize = maxsize;
 }
 
-AuthLDAPConnection *AuthLDAPConnectionPool::getConnection() {
+AuthLDAPConnection *AuthLDAPConnectionPool::get_connection() {
   AuthLDAPConnection *obj = nullptr;
   for (AuthLDAPConnection *con : this->list) {
     if (obj == nullptr) {
@@ -101,7 +109,7 @@ AuthLDAPConnection *AuthLDAPConnectionPool::getConnection() {
   return obj;
 }
 
-AuthLDAPConnection *AuthLDAPConnectionPool::newConnection(bool initial_bind) {
+AuthLDAPConnection *AuthLDAPConnectionPool::new_connection(bool initial_bind) {
   AuthLDAPConnection *obj =
       new AuthLDAPConnection(server_host, server_port, ssl, tls, ca_path,
                              initial_bind, bind_dn, bind_pwd);
@@ -126,7 +134,7 @@ void AuthLDAPConnectionPool::adjust_size(unsigned int maxsize) {
 }
 
 AuthLDAPConnection *AuthLDAPConnectionPool::create_connection(bool borrow) {
-  AuthLDAPConnection *obj = this->newConnection(true);
+  AuthLDAPConnection *obj = new_connection(true);
   if (borrow) obj->borrow();
   this->list.push_back(obj);
   return obj;

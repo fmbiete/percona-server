@@ -22,15 +22,15 @@ IF(WITH_LDAP)
 
   IF(HAVE_LDAP)
     SET(ALP_SOURCES_SASL
+      ../../libmysql/authentication_ldap/log_client.cc
       src/plugin_common.cc
-      src/plugin_log.cc
       src/plugin_sasl.cc
       src/auth_ldap_connection.cc
       src/auth_ldap_connection_pool.cc
     )
     SET(ALP_SOURCES_SIMPLE
+      ../../libmysql/authentication_ldap/log_client.cc
       src/plugin_common.cc
-      src/plugin_log.cc
       src/plugin_simple.cc
       src/auth_ldap_connection.cc
       src/auth_ldap_connection_pool.cc
@@ -42,12 +42,6 @@ IF(WITH_LDAP)
 
     MYSQL_ADD_PLUGIN(authentication_ldap_sasl ${ALP_SOURCES_SASL} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "authentication_ldap_sasl")
     MYSQL_ADD_PLUGIN(authentication_ldap_simple ${ALP_SOURCES_SIMPLE} LINK_LIBRARIES ldap MODULE_ONLY MODULE_OUTPUT_NAME "authentication_ldap_simple")
-
-    MYSQL_ADD_PLUGIN(dialog
-                     ../percona-pam-for-mysql/src/dialog.cc
-                     ../../client/get_password.cc
-                     LINK_LIBRARIES perconaserverclient
-                     MODULE_ONLY)
 
     IF(UNIX)
       IF(INSTALL_MYSQLTESTDIR)

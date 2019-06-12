@@ -20,34 +20,23 @@
 #include "my_sys.h"
 #include "mysql/components/my_service.h"
 #include "mysql/components/service_implementation.h"
-#include "mysql/components/services/log_builtins.h"
+//#include "mysql/components/services/log_builtins.h"
 #include "mysql/plugin_auth.h"
 #include "mysqld_error.h"
 
 #include "plugin/auth_ldap/include/auth_ldap_connection_pool.h"
 
-/**
-  first byte of the question string is the question "type".
-  It can be a "ordinary" or a "password" question.
-  The last bit set marks a last question in the authentication exchange.
-*/
-#define ORDINARY_QUESTION "\2"
-#define LAST_QUESTION "\3"
-#define LAST_PASSWORD "\4"
-#define PASSWORD_QUESTION "\5"
 
 #define STR_NULL(x) (x == nullptr ? "" : x)
 
 int auth_ldap_common_init();
 int auth_ldap_common_deinit(alp::AuthLDAPConnectionPool *connPool);
 
-int auth_ldap_common_authenticate_user(MYSQL_PLUGIN_VIO *vio,
-                                       MYSQL_SERVER_AUTH_INFO *info,
-                                       alp::AuthLDAPConnectionPool *pool,
-                                       const char *user_search_attr,
-                                       const char *group_search_attr,
-                                       const char *group_search_filter,
-                                       const char *bind_base_dn);
+int auth_ldap_common_authenticate_user(
+    MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info, const char *password,
+    alp::AuthLDAPConnectionPool *pool, const char *user_search_attr,
+    const char *group_search_attr, const char *group_search_filter,
+    const char *bind_base_dn);
 
 int auth_ldap_common_generate_auth_string_hash(char *outbuf,
                                                unsigned int *buflen,

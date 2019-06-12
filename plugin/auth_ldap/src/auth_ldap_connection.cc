@@ -25,11 +25,8 @@ AuthLDAPConnection::AuthLDAPConnection(std::string server_host,
                                        bool initial_bind, std::string bind_dn,
                                        std::string bind_pwd) {
   this->ldap = nullptr;
-  if (initiate(server_host, server_port, ssl, tls, ca_path)) {
-    if (initial_bind) {
-      bind(bind_dn, bind_pwd);
-    }
-  }
+  initiate(server_host, server_port, ssl, tls, ca_path);
+  if (initial_bind) bind(bind_dn, bind_pwd, initial_bind);
 }
 
 AuthLDAPConnection::~AuthLDAPConnection() {
@@ -38,9 +35,11 @@ AuthLDAPConnection::~AuthLDAPConnection() {
   }
 }
 
-bool AuthLDAPConnection::bind(std::string bind_dn, std::string bind_pwd) {
+bool AuthLDAPConnection::bind(std::string bind_dn, std::string bind_pwd,
+                              bool initial_bind) {
   if (bind_dn.empty() || bind_pwd.empty()) {
-    // log_error("Error; trying to bind to an empty dn or password");
+    if (!initial_bind)
+      log_srv_error("ERROR; trying to bind to an empty dn or password");
     return false;
   }
 
@@ -51,34 +50,23 @@ bool AuthLDAPConnection::bind(std::string bind_dn, std::string bind_pwd) {
   int err = ldap_sasl_bind_s(this->ldap, bind_dn.c_str(), LDAP_SASL_SIMPLE,
                              userCreds, nullptr, nullptr, &serverCreds);
   if (err != LDAP_SUCCESS) {
-    log_warn("Unsuccesful bind: ldap_sasl_bind_s %s", ldap_err2string(err));
+    std::stringstream log_stream;
+    log_stream << "Unsuccesful bind: ldap_sasl_bind_s(" << bind_dn << ") "
+               << ldap_err2string(err);
+    log_srv_warn(log_stream.str());
     return false;
   }
 
   return true;
 }
 
-std::string AuthLDAPConnection::getLDAPBind(std::string bind_base_dn,
-                                            std::string uid_attr,
-                                            std::string user_name) {
-  std::string str;
-  if (bind_base_dn[0] == '+') {
-    str = uid_attr;
-    str.append("=").append(user_name).append(",");
-    str.append(bind_base_dn.substr(1));
-  } else {
-    str = bind_base_dn;
-  }
-
-  return str;
-}
-
-std::string AuthLDAPConnection::getLDAPUri(std::string server_host,
-                                           unsigned int server_port, bool ssl) {
-  return std::string(ssl ? "ldaps://" : "ldap://")
-      .append(server_host)
-      .append(":")
-      .append(std::to_string(server_port));
+std::string AuthLDAPConnection::get_ldap_uri(std::string server_host,
+                                             unsigned int server_port,
+                                             bool ssl) {
+  std::stringstream str_stream;
+  str_stream << (ssl ? "ldaps://" : "ldap://") << server_host << ":"
+             << server_port;
+  return str_stream.str();
 }
 
 bool AuthLDAPConnection::initiate(std::string server_host,
@@ -88,33 +76,41 @@ bool AuthLDAPConnection::initiate(std::string server_host,
   this->borrowed = false;
 
   if (server_host.empty()) {
-    // log_error("ERROR: server_host is empty");
+    // log_srv_error("ERROR: server_host is empty");
     return false;
   }
 
-  int err = ldap_initialize(&(this->ldap),
-                            getLDAPUri(server_host, server_port, ssl).c_str());
+  int err = ldap_initialize(
+      &(this->ldap), get_ldap_uri(server_host, server_port, ssl).c_str());
   if (err != LDAP_SUCCESS) {
-    log_error("ERROR: ldap_initialize %s", ldap_err2string(err));
+    std::stringstream log_stream;
+    log_stream << "ERROR: ldap_initialize " << ldap_err2string(err);
+    log_srv_error(log_stream.str());
     return false;
   }
 
   int version = LDAP_VERSION3;
   err = ldap_set_option(this->ldap, LDAP_OPT_PROTOCOL_VERSION, &version);
   if (err != LDAP_OPT_SUCCESS) {
-    log_error("ERROR: ldap_set_option(LDAP_OPT_PROTOCOL_VERSION) %s",
-              ldap_err2string(err));
+    std::stringstream log_stream;
+    log_stream << "ERROR: ldap_set_option(LDAP_OPT_PROTOCOL_VERSION) "
+               << ldap_err2string(err);
+    log_srv_error(log_stream.str());
     return false;
   }
 
   ldap_set_option(this->ldap, LDAP_OPT_REFERRALS, LDAP_OPT_OFF);
 
+  ldap_set_option(this->ldap, LDAP_OPT_RESTART, LDAP_OPT_ON);
+
   if (ca_path.size() == 0) {
     int reqCert = LDAP_OPT_X_TLS_NEVER;
     err = ldap_set_option(this->ldap, LDAP_OPT_X_TLS_REQUIRE_CERT, &reqCert);
     if (err != LDAP_OPT_SUCCESS) {
-      log_error("ERROR: ldap_set_option(LDAP_OPT_X_TLS_REQUIRE_CERT) %s",
-                ldap_err2string(err));
+      std::stringstream log_stream;
+      log_stream << "ERROR: ldap_set_option(LDAP_OPT_X_TLS_REQUIRE_CERT) "
+                 << ldap_err2string(err);
+      log_srv_error(log_stream.str());
       return false;
     }
   } else {
@@ -123,8 +119,10 @@ bool AuthLDAPConnection::initiate(std::string server_host,
                           static_cast<void *>(cca_path));
     delete cca_path;
     if (err != LDAP_OPT_SUCCESS) {
-      log_error("ERROR: ldap_set_option(LDAP_OPT_X_TLS_CACERTFILE) %s",
-                ldap_err2string(err));
+      std::stringstream log_stream;
+      log_stream << "ERROR: ldap_set_option(LDAP_OPT_X_TLS_CACERTFILE) "
+                 << ldap_err2string(err);
+      log_srv_error(log_stream.str());
       return false;
     }
   }
@@ -132,15 +130,19 @@ bool AuthLDAPConnection::initiate(std::string server_host,
   int new_ctx = 0;
   err = ldap_set_option(this->ldap, LDAP_OPT_X_TLS_NEWCTX, &new_ctx);
   if (err != LDAP_OPT_SUCCESS) {
-    log_error("ERROR: ldap_set_option(LDAP_OPT_X_TLS_NEWCTX) %s",
-              ldap_err2string(err));
+    std::stringstream log_stream;
+    log_stream << "ERROR: ldap_set_option(LDAP_OPT_X_TLS_NEWCTX) "
+               << ldap_err2string(err);
+    log_srv_error(log_stream.str());
     return false;
   }
 
   if (tls) {
     err = ldap_start_tls_s(this->ldap, nullptr, nullptr);
     if (err != LDAP_SUCCESS) {
-      log_error("ERROR: ldap_start_tls_s %s", ldap_err2string(err));
+      std::stringstream log_stream;
+      log_stream << "ERROR: ldap_start_tls_s " << ldap_err2string(err);
+      log_srv_error(log_stream.str());
       return false;
     }
   }
@@ -152,7 +154,12 @@ std::string AuthLDAPConnection::search_dn(std::string user_name,
                                           std::string user_search_attr,
                                           std::string base_dn) {
   std::string str;
+  std::stringstream log_stream;
   std::string filter = user_search_attr + "=" + user_name;
+
+  log_stream << "search_dn(" << base_dn << ", " << filter << ")";
+  log_srv_dbg(log_stream.str());
+  log_stream.str("");
 
   LDAPMessage *res;
   char *attrs[] = {strdup("dn"), nullptr};
@@ -169,24 +176,34 @@ std::string AuthLDAPConnection::search_dn(std::string user_name,
   if (err == LDAP_SUCCESS) {
     // Verify an entry was found
     if (ldap_count_entries(this->ldap, res) == 0) {
-      log_warn("ldap_search_ext_s(%s, %s) returned no matching entries",
-               base_dn.c_str(), filter.c_str());
+      log_stream << "ldap_search_ext_s(" << base_dn << ", " << filter
+                 << ") returned no matching entries";
+      log_srv_warn(log_stream.str());
+      log_stream.str("");
       // Only free up res if there are no items
       ldap_msgfree(res);
       res = nullptr;
     } else {
       LDAPMessage *entry = ldap_first_entry(this->ldap, res);
       char *dn = ldap_get_dn(this->ldap, entry);
-      log_debug("ldap_search_ext_s(%s, %s): %s", base_dn.c_str(),
-                filter.c_str(), dn);
+      log_stream << "ldap_search_ext_s(" << base_dn << ", " << filter
+                 << "): " << dn;
+      log_srv_dbg(log_stream.str());
+      log_stream.str("");
       str = dn;
       ldap_memfree(dn);
       ldap_memfree(entry);
     }
   } else {
-    log_error("ERROR: ldap_search_ext_s(%s, %s) %s", base_dn.c_str(),
-              filter.c_str(), ldap_err2string(err));
+    log_stream << "ERROR: ldap_search_ext_s(" << base_dn << ", " << filter
+               << ") " << ldap_err2string(err);
+    log_srv_error(log_stream.str());
+    log_stream.str("");
   }
+
+  log_stream << "search_dn(" << base_dn << ", " << filter << ") = " << str;
+  log_srv_dbg(log_stream.str());
+  log_stream.str("");
 
   return str;
 }
@@ -195,10 +212,13 @@ std::list<std::string> AuthLDAPConnection::search_groups(
     std::string user_name, std::string user_dn, std::string group_search_attr,
     std::string group_search_filter, std::string base_dn) {
   std::list<std::string> list;
+  std::stringstream log_stream;
   std::string filter = std::regex_replace(group_search_filter,
                                           std::regex("\\{UA\\}"), user_name);
   filter = std::regex_replace(filter, std::regex("\\{UD\\}"), user_dn);
-  log_debug("search_groups() - filter: %s", filter.c_str());
+  log_stream << "search_groups() - filter: " << filter;
+  log_srv_dbg(log_stream.str());
+  log_stream.str("");
 
   LDAPMessage *res;
   char *attrs[] = {strdup(group_search_attr.c_str()), nullptr};
@@ -213,8 +233,10 @@ std::list<std::string> AuthLDAPConnection::search_groups(
   if (err == LDAP_SUCCESS) {
     // Verify an entry was found
     if (ldap_count_entries(this->ldap, res) == 0) {
-      log_warn("ldap_search_ext_s(%s, %s) returned no matching entries",
-               base_dn.c_str(), filter.c_str());
+      log_stream << "ldap_search_ext_s(" << base_dn << ", " << filter
+                 << ") returned no matching entries";
+      log_srv_warn(log_stream.str());
+      log_stream.str("");
       // Only free up res if there are no items
       ldap_msgfree(res);
       res = nullptr;
@@ -229,8 +251,9 @@ std::list<std::string> AuthLDAPConnection::search_groups(
           vals = ldap_get_values_len(this->ldap, entry, attribute);
           for (int pos = 0; pos < ldap_count_values_len(vals); pos++) {
             list.push_back(std::string(vals[pos]->bv_val));
-            std::cerr << attribute << " " << pos << " " << vals[pos]->bv_val
-                      << '\n';
+            log_stream << attribute << " " << pos << " " << vals[pos]->bv_val;
+            log_srv_dbg(log_stream.str());
+            log_stream.str("");
           }
           ldap_value_free_len(vals);
           attribute = ldap_next_attribute(this->ldap, entry, ber);
@@ -241,9 +264,16 @@ std::list<std::string> AuthLDAPConnection::search_groups(
       }
     }
   } else {
-    log_error("ERROR: ldap_search_ext_s(%s, %s) %s", base_dn.c_str(),
-              filter.c_str(), ldap_err2string(err));
+    log_stream << "ERROR: ldap_search_ext_s(" << base_dn << ", " << filter
+               << ") " << ldap_err2string(err);
+    log_srv_error(log_stream.str());
+    log_stream.str("");
   }
+
+  log_stream << "search_groups() = ";
+  std::copy(list.begin(), list.end(),std::ostream_iterator<std::string>(log_stream, ","));
+  log_srv_dbg(log_stream.str());
+  log_stream.str("");
 
   return list;
 }

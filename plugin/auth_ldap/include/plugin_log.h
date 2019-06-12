@@ -1,4 +1,4 @@
-#ifndef _PLUGIN_LOG_ALP_H_
+#ifndef _PLUGIN_LOG_ALP_H
 /* Copyright (c) 2019 Francisco Miguel Biete Banon. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
@@ -13,31 +13,15 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
-#define _PLUGIN_LOG_ALP_H_
+#define _PLUGIN_LOG_ALP_H
 
-#include <string>
+#include "libmysql/authentication_ldap/log_client.h"
 
-#define ALP_LOG_NONE 1
-#define ALP_LOG_ERR 2
-#define ALP_LOG_WARN 3
-#define ALP_LOG_INFO 4
-#define ALP_LOG_DBUG 5
+extern Ldap_logger *g_logger_server;
 
-#ifndef MYSQL_ABI_CHECK
-#include <stdarg.h>
-#endif
+#define log_srv_dbg g_logger_server->log<ldap_log_type::LDAP_LOG_DBG>
+#define log_srv_info g_logger_server->log<ldap_log_type::LDAP_LOG_INFO>
+#define log_srv_warn g_logger_server->log<ldap_log_type::LDAP_LOG_WARNING>
+#define log_srv_error g_logger_server->log<ldap_log_type::LDAP_LOG_ERROR>
 
-#include "mysql/plugin_auth.h"
-
-// Plugin logging
-void set_alp_log_plugin(MYSQL_PLUGIN *plugin);
-void set_alp_log_status(unsigned int log_status);
-void alp_log(const unsigned int level, const char *format, ...)
-    MY_ATTRIBUTE((format(printf, 2, 3)));
-
-#define log_debug(fmt, ...) alp_log(ALP_LOG_DBUG, fmt, ##__VA_ARGS__)
-#define log_error(fmt, ...) alp_log(ALP_LOG_ERR, fmt, ##__VA_ARGS__)
-#define log_info(fmt, ...) alp_log(ALP_LOG_INFO, fmt, ##__VA_ARGS__)
-#define log_warn(fmt, ...) alp_log(ALP_LOG_WARN, fmt, ##__VA_ARGS__)
-
-#endif  // _PLUGIN_LOG_ALP_H_
+#endif  // _PLUGIN_LOG_ALP_H

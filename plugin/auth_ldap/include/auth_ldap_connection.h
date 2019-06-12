@@ -28,7 +28,8 @@ class AuthLDAPConnection {
                      bool ssl, bool tls, std::string ca_path, bool initial_bind,
                      std::string bind_dn, std::string bind_pwd);
   ~AuthLDAPConnection();
-  bool bind(std::string bind_dn, std::string bind_pwd);
+  bool bind(std::string bind_dn, std::string bind_pwd,
+            bool initial_bind = false);
   inline AuthLDAPConnection *borrow() {
     this->borrowed = true;
     this->borrowed_ts = std::time(nullptr);
@@ -42,19 +43,17 @@ class AuthLDAPConnection {
   std::string search_dn(std::string user_name, std::string user_search_attr,
                         std::string base_dn);
   std::list<std::string> search_groups(std::string user_name,
-                                      std::string bind_user,
-                                      std::string group_search_attr,
-                                      std::string group_search_filter,
-                                      std::string base_dn);
+                                       std::string bind_user,
+                                       std::string group_search_attr,
+                                       std::string group_search_filter,
+                                       std::string base_dn);
   inline void unborrow() { this->borrowed = false; };
 
  private:
-  std::string getLDAPBind(std::string bind_user, std::string uid_attr,
-                          std::string user_name);
-  std::string getLDAPUri(std::string server_host, unsigned int server_port,
-                         bool ssl);
+  std::string get_ldap_uri(std::string server_host, unsigned int server_port,
+                           bool ssl);
   bool initiate(std::string server_host, unsigned int server_port, bool ssl,
-               bool tls, std::string ca_path);
+                bool tls, std::string ca_path);
 
  private:
   bool borrowed;

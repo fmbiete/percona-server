@@ -13,13 +13,16 @@
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
 
-//#include "plugin/auth_ldap/include/auth_ldap_simple.h"
+#include "plugin/auth_ldap/include/plugin_simple.h"
 #include "plugin/auth_ldap/include/auth_ldap_connection.h"
 #include "plugin/auth_ldap/include/auth_ldap_connection_pool.h"
 #include "plugin/auth_ldap/include/plugin_common.h"
 #include "plugin/auth_ldap/include/plugin_log.h"
-#include "plugin/auth_ldap/include/plugin_simple.h"
 #include "plugin/auth_ldap/include/plugin_variables.h"
+
+#define PASSWORD_QUESTION "\5"
+
+Ldap_logger *g_logger_server;
 
 MYSQL_PLUGIN auth_ldap_simple_plugin_info;
 
@@ -34,55 +37,78 @@ void update_sysvar(THD *, SYS_VAR *var, void *var_ptr, const void *value) {
   *(Copy_type *)var_ptr = *(Copy_type *)value;
 
   if (strcmp(var->name, "authentication_ldap_simple_log_status") == 0)
-    set_alp_log_status(log_status);
+    g_logger_server->set_log_level(static_cast<ldap_log_level>(log_status));
   else {
     connPool->reconfigure(init_pool_size, max_pool_size, STR_NULL(server_host),
                           server_port, ssl, tls, STR_NULL(bind_root_dn),
                           STR_NULL(bind_root_pwd), STR_NULL(ca_path));
-    //connPool->debug_info();
+    // connPool->debug_info();
   }
 }
 
 static int auth_ldap_simple_init(MYSQL_PLUGIN plugin_info) {
-  set_alp_log_status(log_status);
-  auth_ldap_common_init();
-  log_debug("auth_ldap_simple_init()");
+  g_logger_server = new Ldap_logger();
+  g_logger_server->set_log_level(static_cast<ldap_log_level>(log_status));
+  log_srv_dbg("Ldap_logger initialized");
 
-  log_debug("Creating LDAP connection pool");
+  auth_ldap_common_init();
+  log_srv_dbg("auth_ldap_simple_init()");
+
+  log_srv_dbg("Creating LDAP connection pool");
   connPool = new alp::AuthLDAPConnectionPool(
       init_pool_size, max_pool_size, STR_NULL(server_host), server_port, ssl,
       tls, STR_NULL(bind_root_dn), STR_NULL(bind_root_pwd), STR_NULL(ca_path));
   connPool->debug_info();
 
   auth_ldap_simple_plugin_info = plugin_info;
-  log_info("Plugin initialized");
+  log_srv_info("Plugin initialized");
 
   return 0;
 }
 
 static int auth_ldap_simple_deinit(MYSQL_PLUGIN plugin_info
                                    __attribute__((unused))) {
-  log_debug("auth_ldap_simple_deinit()");
+  log_srv_dbg("auth_ldap_simple_deinit()");
 
   auth_ldap_common_deinit(connPool);
 
+  delete g_logger_server;
   auth_ldap_simple_plugin_info = nullptr;
   return 0;
 }
 
 int alp_simple_authenticate(MYSQL_PLUGIN_VIO *vio,
                             MYSQL_SERVER_AUTH_INFO *info) {
-  log_debug("alp_simple_authenticate()");
+  log_srv_dbg("alp_simple_authenticate()");
 
-  return auth_ldap_common_authenticate_user(vio, info, connPool,
-                                            user_search_attr, group_search_attr,
-                                            group_search_filter, bind_base_dn);
+  // mysql_clear_password
+  unsigned char *password;
+
+  // send the password question
+  if (vio->write_packet(vio,
+                        static_cast<const unsigned char *>(
+                            static_cast<const void *>(PASSWORD_QUESTION)),
+                        1)) {
+    log_srv_error("Failed to write password question");
+    return CR_ERROR;
+  }
+
+  // read the password
+  if ((vio->read_packet(vio, &password)) < 0) {
+    log_srv_error("Failed to read password packet");
+    return CR_ERROR;
+  }
+
+  info->password_used = PASSWORD_USED_YES;
+  return auth_ldap_common_authenticate_user(
+      vio, info, static_cast<char *>(static_cast<void *>(password)), connPool,
+      user_search_attr, group_search_attr, group_search_filter, bind_base_dn);
 }
 
 // Plugin declaration
 struct st_mysql_auth alp_simple_handler = {
     MYSQL_AUTHENTICATION_INTERFACE_VERSION,  // int interface_version
-    "dialog",                                // const char *client_auth_plugin
+    "mysql_clear_password",                  // const char *client_auth_plugin
     &alp_simple_authenticate,                // authentication function
     &auth_ldap_common_generate_auth_string_hash,  // generate_authentication_string,
     &auth_ldap_common_validate_auth_string_hash,  // validate_authentication_string,

@@ -1,4 +1,4 @@
-#ifndef _AUTH_LDAP_CONNECTION_ALP_H
+#ifndef _AUTH_LDAP_CONNECTION_MPALDAP_H
 /* Copyright (c) 2019 Francisco Miguel Biete Banon. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
@@ -13,7 +13,7 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
-#define _AUTH_LDAP_CONNECTION_ALP_H
+#define _AUTH_LDAP_CONNECTION_MPALDAP_H
 
 #include <ctime>
 #include <list>
@@ -21,7 +21,9 @@
 
 #include <ldap.h>
 
-namespace alp {
+namespace mysql {
+namespace plugin {
+namespace auth_ldap {
 class AuthLDAPConnection {
  public:
   AuthLDAPConnection(std::string server_host, unsigned int server_port,
@@ -38,6 +40,7 @@ class AuthLDAPConnection {
   inline unsigned int borrowed_for_secs() {
     return std::time(nullptr) - this->borrowed_ts;
   };
+  bool is_alive();
   inline bool is_borrowed() { return this->borrowed; }
   inline int get_error() { return this->error; }
   std::string search_dn(std::string user_name, std::string user_search_attr,
@@ -62,6 +65,8 @@ class AuthLDAPConnection {
   int error;
   LDAP *ldap;
 };
-}  // namespace alp
+}  // namespace auth_ldap
+}  // namespace plugin
+}  // namespace mysql
 
-#endif  // _AUTH_LDAP_CONNECTION_ALP_H
+#endif  // _AUTH_LDAP_CONNECTION_MPALDAP_H

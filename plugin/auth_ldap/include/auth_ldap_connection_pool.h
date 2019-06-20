@@ -1,4 +1,4 @@
-#ifndef _AUTH_LDAP_CONNECTION_POOL_ALP_H
+#ifndef _AUTH_LDAP_CONNECTION_POOL_MPALDAP_H
 /* Copyright (c) 2019 Francisco Miguel Biete Banon. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
@@ -13,14 +13,16 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
-#define _AUTH_LDAP_CONNECTION_POOL_ALP_H
+#define _AUTH_LDAP_CONNECTION_POOL_MPALDAP_H
 
 #include "plugin/auth_ldap/include/auth_ldap_connection.h"
 
 #include <list>
 #include <string>
 
-namespace alp {
+namespace mysql {
+namespace plugin {
+namespace auth_ldap {
 class AuthLDAPConnectionPool {
  public:
   AuthLDAPConnectionPool(unsigned int initsize, unsigned int maxsize,
@@ -34,15 +36,15 @@ class AuthLDAPConnectionPool {
   inline int max_size() { return this->maxsize; }
   void reconfigure(unsigned int initsize, unsigned int maxsize,
                    std::string server_host, unsigned int server_port, bool ss,
-                   bool tls, std::string bind_dn,
-                   std::string bind_pwd, std::string ca_path);
+                   bool tls, std::string bind_dn, std::string bind_pwd,
+                   std::string ca_path);
 
  private:
-  void adjust_size(unsigned int maxsize);
   AuthLDAPConnection *create_connection(bool borrow);
   void destroy(AuthLDAPConnection *con);
   void destroy_all();
   bool destroy_if_expired(AuthLDAPConnection *con);
+  void house_keeping_pool(unsigned int maxsize);
 
  private:
   const unsigned int lost_connection_secs = 5;
@@ -58,6 +60,8 @@ class AuthLDAPConnectionPool {
   bool ssl;
   bool tls;
 };
-}  // namespace alp
+}  // namespace auth_ldap
+}  // namespace plugin
+}  // namespace mysql
 
-#endif  // _AUTH_LDAP_CONNECTION_POOL_ALP_H
+#endif  // _AUTH_LDAP_CONNECTION_POOL_MPALDAP_H

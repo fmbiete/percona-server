@@ -15,7 +15,9 @@
 #include "plugin/auth_ldap/include/auth_ldap_connection_pool.h"
 #include "plugin/auth_ldap/include/plugin_log.h"
 
-namespace alp {
+namespace mysql {
+namespace plugin {
+namespace auth_ldap {
 AuthLDAPConnectionPool::AuthLDAPConnectionPool(
     unsigned int initsize, unsigned int maxsize, std::string server_host,
     unsigned int server_port, bool ssl, bool tls, std::string bind_dn,
@@ -75,7 +77,7 @@ void AuthLDAPConnectionPool::reconfigure(
       }
     }
 
-    adjust_size(maxsize);
+    house_keeping_pool(maxsize);
   }
   this->initsize = initsize;
   this->maxsize = maxsize;
@@ -83,15 +85,16 @@ void AuthLDAPConnectionPool::reconfigure(
 
 AuthLDAPConnection *AuthLDAPConnectionPool::get_connection() {
   AuthLDAPConnection *obj = nullptr;
-  for (AuthLDAPConnection *con : this->list) {
+  for (AuthLDAPConnection *conn : this->list) {
     if (obj == nullptr) {
-      if (con->is_borrowed()) {
-        if (destroy_if_expired(con)) {
+      if (conn->is_borrowed()) {
+        // Checking for zombie connections
+        if (destroy_if_expired(conn)) {
           obj = create_connection(true);
         }
       } else {
-        con->borrow();
-        obj = con;
+        conn->borrow();
+        obj = conn->is_alive() ? conn : create_connection(true);
       }
     }
   }
@@ -104,7 +107,7 @@ AuthLDAPConnection *AuthLDAPConnectionPool::get_connection() {
     }
   }
 
-  adjust_size(this->maxsize);
+  house_keeping_pool(this->maxsize);
 
   return obj;
 }
@@ -114,23 +117,6 @@ AuthLDAPConnection *AuthLDAPConnectionPool::new_connection(bool initial_bind) {
       new AuthLDAPConnection(server_host, server_port, ssl, tls, ca_path,
                              initial_bind, bind_dn, bind_pwd);
   return obj;
-}
-
-void AuthLDAPConnectionPool::adjust_size(unsigned int maxsize) {
-  if (this->list.size() > maxsize) {
-    int to_remove = this->list.size() - maxsize;
-    int removed = 0;
-    for (AuthLDAPConnection *con : list) {
-      if (removed < to_remove) {
-        if (con->is_borrowed()) {
-          if (destroy_if_expired(con)) removed++;
-        } else {
-          destroy(con);
-          removed++;
-        }
-      }
-    }
-  }
 }
 
 AuthLDAPConnection *AuthLDAPConnectionPool::create_connection(bool borrow) {
@@ -160,4 +146,24 @@ bool AuthLDAPConnectionPool::destroy_if_expired(AuthLDAPConnection *con) {
   }
   return false;
 }
-}  // namespace alp
+
+void AuthLDAPConnectionPool::house_keeping_pool(unsigned int maxsize) {
+  if (this->list.size() > maxsize) {
+    int to_remove = this->list.size() - maxsize;
+    int removed = 0;
+    for (AuthLDAPConnection *con : list) {
+      if (removed < to_remove) {
+        if (con->is_borrowed()) {
+          if (destroy_if_expired(con)) removed++;
+        } else {
+          destroy(con);
+          removed++;
+        }
+      }
+    }
+  }
+}
+
+}  // namespace auth_ldap
+}  // namespace plugin
+}  // namespace mysql

@@ -1,4 +1,4 @@
-#ifndef _PLUGIN_VARIABLES_ALP_H
+#ifndef _PLUGIN_VARIABLES_MPALDAP_H
 /* Copyright (c) 2019 Francisco Miguel Biete Banon. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
@@ -13,7 +13,7 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
-#define _PLUGIN_VARIABLES_ALP_H
+#define _PLUGIN_VARIABLES_MPALDAP_H
 
 #include "plugin/auth_ldap/include/auth_ldap_connection_pool.h"
 #include "plugin/auth_ldap/include/plugin_common.h"
@@ -42,7 +42,7 @@ static bool ssl;
 static bool tls;
 static char *user_search_attr;
 
-static alp::AuthLDAPConnectionPool *connPool;
+static mysql::plugin::auth_ldap::AuthLDAPConnectionPool *connPool;
 
 template <typename Copy_type>
 void update_sysvar(THD *, SYS_VAR *var, void *tgt, const void *save);
@@ -140,7 +140,7 @@ static MYSQL_SYSVAR_STR(user_search_attr, user_search_attr,
                         &update_sysvar<char *> /* update */,
                         "uid" /* default */);
 
-static SYS_VAR *alp_sysvars[] = {MYSQL_SYSVAR(auth_method_name),
+static SYS_VAR *mpaldap_sysvars[] = {MYSQL_SYSVAR(auth_method_name),
                                  MYSQL_SYSVAR(bind_base_dn),
                                  MYSQL_SYSVAR(bind_root_dn),
                                  MYSQL_SYSVAR(bind_root_pwd),
@@ -157,4 +157,4 @@ static SYS_VAR *alp_sysvars[] = {MYSQL_SYSVAR(auth_method_name),
                                  MYSQL_SYSVAR(user_search_attr),
                                  nullptr};
 
-#endif  // _PLUGIN_VARIABLES_ALP_H
+#endif  // _PLUGIN_VARIABLES_MPALDAP_H

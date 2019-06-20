@@ -55,7 +55,7 @@ static int auth_ldap_simple_init(MYSQL_PLUGIN plugin_info) {
   log_srv_dbg("auth_ldap_simple_init()");
 
   log_srv_dbg("Creating LDAP connection pool");
-  connPool = new alp::AuthLDAPConnectionPool(
+  connPool = new mysql::plugin::auth_ldap::AuthLDAPConnectionPool(
       init_pool_size, max_pool_size, STR_NULL(server_host), server_port, ssl,
       tls, STR_NULL(bind_root_dn), STR_NULL(bind_root_pwd), STR_NULL(ca_path));
   connPool->debug_info();
@@ -77,9 +77,9 @@ static int auth_ldap_simple_deinit(MYSQL_PLUGIN plugin_info
   return 0;
 }
 
-int alp_simple_authenticate(MYSQL_PLUGIN_VIO *vio,
+int mpaldap_simple_authenticate(MYSQL_PLUGIN_VIO *vio,
                             MYSQL_SERVER_AUTH_INFO *info) {
-  log_srv_dbg("alp_simple_authenticate()");
+  log_srv_dbg("mpaldap_simple_authenticate()");
 
   // mysql_clear_password
   unsigned char *password;
@@ -106,10 +106,10 @@ int alp_simple_authenticate(MYSQL_PLUGIN_VIO *vio,
 }
 
 // Plugin declaration
-struct st_mysql_auth alp_simple_handler = {
+struct st_mysql_auth mpaldap_simple_handler = {
     MYSQL_AUTHENTICATION_INTERFACE_VERSION,  // int interface_version
     "mysql_clear_password",                  // const char *client_auth_plugin
-    &alp_simple_authenticate,                // authentication function
+    &mpaldap_simple_authenticate,                // authentication function
     &auth_ldap_common_generate_auth_string_hash,  // generate_authentication_string,
     &auth_ldap_common_validate_auth_string_hash,  // validate_authentication_string,
     &auth_ldap_common_set_salt,                   // set_salt,
@@ -118,8 +118,8 @@ struct st_mysql_auth alp_simple_handler = {
 
 mysql_declare_plugin(auth_ldap_simple) {
   MYSQL_AUTHENTICATION_PLUGIN,             /* plugin type */
-      &alp_simple_handler,                 /* type-specific descriptor */
-      ALP_SIMPLE_PLUGIN_NAME,              /* plugin name */
+      &mpaldap_simple_handler,                 /* type-specific descriptor */
+      MPALDAP_SIMPLE_PLUGIN_NAME,              /* plugin name */
       "Francisco Miguel Biete Banon",      /* author */
       "LDAP Simple authentication plugin", /* description */
       PLUGIN_LICENSE_GPL,                  /* license type */
@@ -128,7 +128,7 @@ mysql_declare_plugin(auth_ldap_simple) {
       nullptr,                             /* no check function */
       0x0100,                              /* version = 1.0 */
       nullptr,                             /* no status variables */
-      alp_sysvars,                         /* system variables */
+      mpaldap_sysvars,                         /* system variables */
       nullptr                              /* no reserved information */
 #if MYSQL_PLUGIN_INTERFACE_VERSION >= 0x103
       ,

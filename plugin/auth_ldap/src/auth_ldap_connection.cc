@@ -18,7 +18,9 @@
 #include <iostream>
 #include <regex>
 
-namespace alp {
+namespace mysql {
+namespace plugin {
+namespace auth_ldap {
 AuthLDAPConnection::AuthLDAPConnection(std::string server_host,
                                        unsigned int server_port, bool ssl,
                                        bool tls, std::string ca_path,
@@ -150,6 +152,11 @@ bool AuthLDAPConnection::initiate(std::string server_host,
   return true;
 }
 
+bool AuthLDAPConnection::is_alive() {
+  int id;
+  return ldap_whoami(this->ldap, nullptr, nullptr, &id) == LDAP_SUCCESS;
+}
+
 std::string AuthLDAPConnection::search_dn(std::string user_name,
                                           std::string user_search_attr,
                                           std::string base_dn) {
@@ -251,9 +258,6 @@ std::list<std::string> AuthLDAPConnection::search_groups(
           vals = ldap_get_values_len(this->ldap, entry, attribute);
           for (int pos = 0; pos < ldap_count_values_len(vals); pos++) {
             list.push_back(std::string(vals[pos]->bv_val));
-            log_stream << attribute << " " << pos << " " << vals[pos]->bv_val;
-            log_srv_dbg(log_stream.str());
-            log_stream.str("");
           }
           ldap_value_free_len(vals);
           attribute = ldap_next_attribute(this->ldap, entry, ber);
@@ -271,11 +275,14 @@ std::list<std::string> AuthLDAPConnection::search_groups(
   }
 
   log_stream << "search_groups() = ";
-  std::copy(list.begin(), list.end(),std::ostream_iterator<std::string>(log_stream, ","));
+  std::copy(list.begin(), list.end(),
+            std::ostream_iterator<std::string>(log_stream, ","));
   log_srv_dbg(log_stream.str());
   log_stream.str("");
 
   return list;
 }
 
-}  // namespace alp
+}  // namespace auth_ldap
+}  // namespace plugin
+}  // namespace mysql

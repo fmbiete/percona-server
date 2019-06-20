@@ -1,4 +1,4 @@
-#ifndef _PLUGIN_SASL_ALP_H
+#ifndef _PLUGIN_SASL_MPALDAP_H
 /* Copyright (c) 2019 Francisco Miguel Biete Banon. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
@@ -13,8 +13,9 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
-#define _PLUGIN_SASL_ALP_H
+#define _PLUGIN_SASL_MPALDAP_H
 
-#define ALP_SASL_PLUGIN_NAME "authentication_ldap_sasl"
+#define MPALDAP_SASL_PLUGIN_NAME "authentication_ldap_sasl"
 
-#endif  // _PLUGIN_SASL_ALP_H
+#endif  // _PLUGIN_SASL_MPALDAP_H
+MPALDAP_

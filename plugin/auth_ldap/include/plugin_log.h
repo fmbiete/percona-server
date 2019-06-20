@@ -1,4 +1,4 @@
-#ifndef _PLUGIN_LOG_ALP_H
+#ifndef _PLUGIN_LOG_MPALDAP_H
 /* Copyright (c) 2019 Francisco Miguel Biete Banon. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
@@ -13,7 +13,7 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
    51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
-#define _PLUGIN_LOG_ALP_H
+#define _PLUGIN_LOG_MPALDAP_H
 
 #include "libmysql/authentication_ldap/log_client.h"
 
@@ -24,4 +24,4 @@ extern Ldap_logger *g_logger_server;
 #define log_srv_warn g_logger_server->log<ldap_log_type::LDAP_LOG_WARNING>
 #define log_srv_error g_logger_server->log<ldap_log_type::LDAP_LOG_ERROR>
 
-#endif  // _PLUGIN_LOG_ALP_H
+#endif  // _PLUGIN_LOG_MPALDAP_H

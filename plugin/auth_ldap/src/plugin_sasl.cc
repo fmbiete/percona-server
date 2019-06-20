@@ -21,7 +21,8 @@
 
 #include <sasl/sasl.h>
 
-#define SASL_SERVICE_NAME "ldap"
+#define MYSQL_SASL_SERVICE_NAME "ldap"
+#define MYSQL_SASL_MECHANISM "SCRAM-SHA-1"
 
 Ldap_logger *g_logger_server;
 
@@ -47,22 +48,76 @@ void update_sysvar(THD *, SYS_VAR *var, void *var_ptr, const void *value) {
   }
 }
 
-int log_sasl_error(MYSQL_PLUGIN_VIO *vio, const char *msg, int err_code,
-                   bool b_sasl_send_n, bool b_sasl_dispose, sasl_conn_t **conn,
-                   int result) {
+// Return true on success
+bool _client_recv(MYSQL_PLUGIN_VIO *vio, char **data, unsigned int *len) {
+  unsigned char *buf;
+  int slen = 0;
+  *data = nullptr;
+  if ((slen = vio->read_packet(vio, &buf)) != -1) {
+    *len = slen;
+    *data = new char[*len];
+    memcpy(*data, buf, *len);
+    std::stringstream log_stream;
+    log_stream << "_client_recv [" << *data << "]";
+    log_srv_dbg(log_stream.str());
+  } else {
+    *len = 0;
+  }
+  return slen != -1;
+}
+
+// Return true on success
+bool _client_send(MYSQL_PLUGIN_VIO *vio, const char *data, int len = 1) {
+  std::stringstream log_stream;
+  log_stream << "_client_send [" << data << "]";
+  log_srv_dbg(log_stream.str());
+  return vio->write_packet(vio, reinterpret_cast<const unsigned char *>(data),
+                           len) == 0;
+}
+
+int _sasl_error(MYSQL_PLUGIN_VIO *vio, sasl_conn_t **conn, const char *msg,
+                int err_code = SASL_OK, int ret_code = CR_AUTH_PLUGIN_ERROR) {
   std::stringstream log_stream;
   log_stream << msg;
-  if (err_code != SASL_OK)
-    log_stream << " " << sasl_errstring(err_code, nullptr, nullptr);
+  if (err_code != SASL_OK) {
+    log_stream << " (" << err_code << ") "
+               << sasl_errstring(err_code, nullptr, nullptr) << "["
+               << sasl_errdetail(*conn) << "]";
+  }
   log_srv_error(log_stream.str());
-  if (b_sasl_send_n) {
-    vio->write_packet(
-        vio, static_cast<const unsigned char *>(static_cast<const void *>("N")),
-        1);  // trying to tell the sasl client to end
+  if (conn != nullptr) {
+    _client_send(vio, "N");
+    sasl_dispose(conn);
   }
 
-  if (b_sasl_dispose) sasl_dispose(conn);
-  return result;
+  return ret_code;
+}
+
+static int canonuser(sasl_conn_t *connection __attribute__((unused)),
+                     void *context __attribute__((unused)), const char *input,
+                     unsigned inputLength,
+                     unsigned flags __attribute__((unused)),
+                     const char *userRealm __attribute__((unused)),
+                     char *output,
+                     unsigned outputMaxLength __attribute__((unused)),
+                     unsigned *outputLength) {
+  // Tell SASL that the canonical username is the same as the
+  // client-supplied username.
+  memcpy(output, input, inputLength);
+  *outputLength = inputLength;
+
+  log_srv_dbg("canonuser()");
+  log_srv_dbg(input);
+  log_srv_dbg(output);
+
+  return SASL_OK;
+}
+
+static int checkpass(sasl_conn_t *conn, void *context, const char *user,
+                     const char *pass, unsigned passlen,
+                     struct propctx *propctx) {
+  log_srv_dbg("sasl_server_userdb_checkpass");
+  return SASL_OK;
 }
 
 static int auth_ldap_sasl_init(MYSQL_PLUGIN plugin_info) {
@@ -77,10 +132,14 @@ static int auth_ldap_sasl_init(MYSQL_PLUGIN plugin_info) {
   log_srv_dbg("auth_ldap_sasl_init()");
 
   log_srv_dbg("Initializing SASL library");
-  int res = sasl_server_init(NULL, SASL_SERVICE_NAME);
-  if (res != SASL_OK) {
-    return log_sasl_error(nullptr, "ERROR: Initializing SASL library", res,
-                          false, false, nullptr, 1);
+  int sres = sasl_server_init(nullptr, MYSQL_SASL_SERVICE_NAME);
+  if (sres != SASL_OK) {
+    return _sasl_error(nullptr, nullptr, "ERROR: Initializing SASL library (server)",
+                       sres);
+  }
+  sres = sasl_client_init(nullptr);
+  if (sres != SASL_OK) {
+    return _sasl_error(nullptr, nullptr, "ERROR: Initializing SASL library (client)", sres);
   }
 
   log_srv_dbg("Creating LDAP connection pool");
@@ -108,142 +167,269 @@ static int auth_ldap_sasl_deinit(MYSQL_PLUGIN plugin_info
   return 0;
 }
 
-int alp_sasl_authenticate(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info) {
-  log_srv_dbg("alp_sasl_authenticate()");
-
-  // Create sasl server
-  sasl_conn_t *conn;
-  log_srv_dbg("Creating SASL server connection");
-  int res = sasl_server_new(SASL_SERVICE_NAME, nullptr, nullptr, nullptr,
-                            nullptr, nullptr, 0, &conn);
-  if (res != SASL_OK) {
-    return log_sasl_error(vio, "ERROR: Creating SASL server connection", res,
-                          false, false, nullptr, CR_AUTH_PLUGIN_ERROR);
-  }
-
-  // TODO: Channel binding?
-
-  const char *data;
-  int len, count;
-  log_srv_dbg("Creating SASL list mechanism");
-  res = sasl_listmech(conn, nullptr, nullptr, " ", nullptr, &data,
-                      (unsigned int *)&len, &count);
-  if (res != SASL_OK) {
-    return log_sasl_error(vio, "ERROR: Creating SASL list mechanism", res,
-                          false, true, &conn, CR_AUTH_PLUGIN_ERROR);
-  }
+int mpaldap_sasl_authenticate(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info) {
+  log_srv_dbg("mpaldap_sasl_authenticate()");
   std::stringstream log_stream;
-  log_stream << "SASL mechanisms " << count << " [" << data << "]";
-  log_srv_dbg(log_stream.str());
-  log_stream.str("");
+  sasl_conn_t *conn = nullptr;
+  char *client_in = nullptr;
+  unsigned int client_in_len;
 
-  // send list
-  if (vio->write_packet(vio, (const unsigned char *)data, len) != 0) {
-    return log_sasl_error(vio,
-                          "ERROR: writing SASL list mechanism to MySQL socket",
-                          SASL_OK, false, true, &conn, CR_AUTH_PLUGIN_ERROR);
+  // FIXME: this is a TCP proxy, we don't need to understand SASL for the most part of this
+  log_srv_dbg("c: received client initial request");
+  log_srv_dbg("s: send mechanism to client");
+  if (!_client_send(vio, MYSQL_SASL_MECHANISM, strlen(MYSQL_SASL_MECHANISM))) {
+    return _sasl_error(vio, &conn,
+                       "ERROR: Sending SASL mechanism list to client");
+  }
+  log_srv_dbg("p: creating SASL request to ldap server");
+  sres = sasl_client_new(MYSQL_SASL_SERVICE_NAME, nullptr, nullptr, nullptr, nullptr, 0, &conn);
+  if (sres != SASL_OK) {
+    return _sasl_error(vio, &conn, "ERROR: creating SASL client to proxy requests", sres);
+  }
+  // TODO: security properties
+  log_srv_dbg("p: create TCP connection to LDAP server");
+  // TODO:
+  log_srv_dbg("p: negotiate mechanism with ldap server");
+  write_to_ldap(MYSQL_SASL_MECHANISM, strlen(MYSQL_SASL_MECHANISM));
+  // Get and send
+  log_srv_dbg("c: receive first packet");
+  if (!_client_recv(vio, &client_in, &client_in_len)) {
+    return _sasl_error(vio, &conn, "ERROR: Reading SASL first packet");
+  }
+  //n,a=user1,n=user1,r=q4W25ieI2tinTIYFgd0MPt4XaWP3GDN6
+  log_srv_dbg("s: transform user name");
+  // split string by ,
+  std::vector<std::string> parts, subparts;
+  boost::algorithm::split(parts, client_in, boost::is_any_of(","));
+  std::string a = parts[1];
+  boost::algorithm::split(subparts, a, boost::is_any_of("="));
+  std::string user_name = subparts[1];
+  std::string uid = get_uid();
+  std::string n = parts[2];
+  std::string nonce = parts[3];
+  // common get uid
+  // TODO:
+  log_srv_dbg("s: rewrite first request");
+  log_stream << "n,a=" << uid << ",n=" << uid << nonce;
+  // TODO:
+  log_srv_dbg("p: send first packet");
+  // TODO:
+  log_srv_dbg("p: receive first answer");
+  // TODO:
+  log_srv_dbg("s: send first answer");
+  // N packets
+
+
+
+  const char *server_out;
+  unsigned int client_in_len, server_out_len;
+
+  sasl_security_properties_t secprops;
+  memset(&secprops, 0L, sizeof(secprops));
+  secprops.maxbufsize = 2048;
+  secprops.max_ssf = UINT_MAX;
+  secprops.security_flags |= SASL_SEC_PASS_CREDENTIALS;
+
+  log_srv_dbg("sasl_server_new");
+  sasl_conn_t *conn = nullptr;
+  // https://gitlab.oye.io/oyenet/mesos/blob/322cb8b77c0f27b135cae088281bc49f6a27ec01/src/authentication/cram_md5/authenticator.cpp
+  // https://www.cyrusimap.org/sasl/sasl/developer/programming.html#common-section
+  const sasl_callback_t callbacks[] = {
+      {SASL_CB_CANON_USER, (int (*)()) & canonuser, nullptr},
+      {SASL_CB_SERVER_USERDB_CHECKPASS, (int (*)()) & checkpass, nullptr},
+      {SASL_CB_LIST_END, nullptr, nullptr}};
+  int sres = sasl_server_new(MYSQL_SASL_SERVICE_NAME, nullptr, nullptr, nullptr,
+                             nullptr, callbacks, 0, &conn);
+  if (sres != SASL_OK) {
+    return _sasl_error(vio, &conn, "ERROR: Creating SASL server connection",
+                       sres);
   }
 
-  unsigned char *chosenmech;
-  if (vio->read_packet(vio, &chosenmech) < 0) {
-    return log_sasl_error(vio, "ERROR: reading SASL mechanism chosen by client",
-                          SASL_OK, true, true, &conn, CR_AUTH_PLUGIN_ERROR);
+  /*
+  sres = sasl_setprop(conn, SASL_SEC_PROPS, &secprops);
+  if (sres != SASL_OK) {
+    return _sasl_error(vio, &conn, "ERROR: Setting SASL security properties",
+                       sres);
+  }*/
+
+  // https://www.cyrusimap.org/sasl/sasl/developer/programming.html#a-typical-interaction-from-the-server-s-perspective
+
+  log_srv_dbg("force sasl mechanism");
+  const char *chosenmech = MYSQL_SASL_MECHANISM;
+
+  log_srv_dbg("send sasl mechanism");
+  if (!_client_send(vio, MYSQL_SASL_MECHANISM, strlen(MYSQL_SASL_MECHANISM))) {
+    return _sasl_error(vio, &conn,
+                       "ERROR: Sending SASL mechanism list to client");
   }
 
-  log_stream << "SASL mechanism chosen by client " << chosenmech;
-  log_srv_dbg(log_stream.str());
-  log_stream.str("");
-  log_srv_dbg()
+  // log_srv_dbg("receive answer <sasl mechanism>");
+  // char *chosenmech;
+  // if (!_client_recv(vio, &chosenmech, &len)) {
+  //   return _sasl_error(vio, &conn,
+  //                      "ERROR: SASL mechanism not read from client");
+  // }
+  // if (strcmp(chosenmech, MYSQL_SASL_MECHANISM) != 0) {
+  //   delete chosenmech;
+  //   return _sasl_error(
+  //       vio, &conn, "ERROR: SASL mechanism from client not supported by
+  //       MySQL");
+  // }
 
-  // read first parameter
-  unsigned char *buf;
-  if ((len = vio->read_packet(vio, &buf)) < 0) {
-    return log_sasl_error(vio, "ERROR: reading SASL parameter", SASL_OK, true,
-                          true, &conn, CR_AUTH_PLUGIN_ERROR);
+  log_srv_dbg("sasl_server_start");
+  sres = sasl_server_start(conn, MYSQL_SASL_MECHANISM, nullptr, 0, &server_out,
+                           &server_out_len);
+  if (sres != SASL_OK && sres != SASL_CONTINUE) {
+    return _sasl_error(vio, &conn, "ERROR: Starting SASL server process", sres);
   }
 
-  if (buf[0] == 'Y') {
-    // Extra packet in the initial request, discard and read the next
-    if ((len = vio->read_packet(vio, &buf)) < 0) {
-      return log_sasl_error(vio, "ERROR: reading SASL parameter loop", SASL_OK,
-                            true, true, &conn, CR_AUTH_PLUGIN_ERROR);
-    }
-    res = sasl_server_start(
-        conn, static_cast<const char *>(static_cast<void *>(chosenmech)),
-        static_cast<const char *>(static_cast<void *>(buf)), len, &data,
-        static_cast<unsigned int *>(static_cast<void *>(&len)));
+  log_srv_dbg("sasl receive first packet");
+  if (!_client_recv(vio, &client_in, &client_in_len)) {
+    return _sasl_error(vio, &conn, "ERROR: Reading SASL first packet");
+  }
+
+  log_srv_dbg("sasl process first packet");
+  sres = sasl_server_step(conn, client_in, client_in_len, &server_out,
+                          &server_out_len);
+  if (sres != SASL_OK && sres != SASL_CONTINUE) {
+    return _sasl_error(vio, &conn, "ERROR: Executing SASL step", sres);
+  }
+
+  log_srv_dbg("send second packet");
+  _client_send(vio, server_out, server_out_len);
+
+  return CR_OK;
+
+  log_srv_dbg("sasl_server_start");
+  if (client_in) {
+    sres = sasl_server_start(conn, chosenmech, client_in, client_in_len,
+                             &server_out, &server_out_len);
   } else {
-    res = sasl_server_start(
-        conn, static_cast<const char *>(static_cast<void *>(chosenmech)),
-        nullptr, 0, &data,
-        static_cast<unsigned int *>(static_cast<void *>(&len)));
+    sres = sasl_server_start(conn, chosenmech, nullptr, 0, &server_out,
+                             &server_out_len);
+  }
+  // const char *data;
+  // if (buf[0] == 'y') {
+  // log_srv_dbg("initial packet found, reading next");
+  // delete buf;
+  // if (!_client_recv(vio, &buf, &len)) {
+  // return _sasl_error(vio, &conn,
+  // "ERROR: Reading SASL first packet after discard one");
+  // }
+
+  // sres = sasl_server_start(conn, chosenmech, buf, len, &data, &len);
+  // } else {
+  // sres = sasl_server_start(conn, chosenmech, nullptr, 0, &data, &len);
+  // }
+
+  // TODO: can we cast *buf to sasl_interact_t *
+  // struct id, result, len
+
+  if (sres != SASL_OK && sres != SASL_CONTINUE) {
+    return _sasl_error(vio, &conn, "ERROR: Starting SASL server process", sres);
   }
 
-  if (res != SASL_OK && res != SASL_CONTINUE) {
-    return log_sasl_error(vio, "ERROR: starting SASL server", res, true, true,
-                          &conn, CR_AUTH_PLUGIN_ERROR);
-  }
-
-  while (res == SASL_CONTINUE) {
-    if (vio->write_packet(
-            vio,
-            static_cast<const unsigned char *>(static_cast<const void *>("C")),
-            1) != 0) {
-      return log_sasl_error(vio, "ERROR: writing SASL continue", SASL_OK, true,
-                            true, &conn, CR_AUTH_PLUGIN_ERROR);
+  while (sres == SASL_CONTINUE) {
+    log_srv_dbg("loop send sasl continue");
+    _client_send(vio, "C");
+    if (server_out) {
+      _client_send(vio, server_out, server_out_len);
     }
 
-    if ((len = vio->read_packet(vio, &buf)) < 0) {
-      return log_sasl_error(vio, "ERROR: reading SASL parameter loop", SASL_OK,
-                            true, true, &conn, CR_AUTH_PLUGIN_ERROR);
-    }
+    // if (data) {
+    // if(!(_client_send(vio, "C") || _client_send(vio, data, true, len))) {
+    // return _sasl_error(vio, &conn, "ERROR: Sending SASL continue packet with
+    // data");
+    // }
+    // } else {
+    // if(!(_client_send(vio, "C") || _client_send(vio, "", true, 0))) {
+    // return _sasl_error(vio, &conn, "ERROR: Sending SASL continue packet
+    // without data");
+    // }
 
-    log_srv_dbg("read ");
-    log_srv_dbg(static_cast<const char *>(static_cast<void *>(buf)));
+    log_srv_dbg("loop receive sasl data");
+    _client_recv(vio, &client_in, &client_in_len);
+    // delete buf;
+    // if (!_client_recv(vio, &buf, &len)) {
+    // return _sasl_error(vio, &conn,
+    // "ERROR: Receiving SASL packet after continue");
+    // }
 
-    res = sasl_server_step(conn,
-                           static_cast<const char *>(static_cast<void *>(buf)),
-                           len, &data, (unsigned int *)&len);
-    if (res != SASL_OK && res != SASL_CONTINUE) {
-      return log_sasl_error(vio, "ERROR: step SASL server loop", res, true,
-                            true, &conn, CR_AUTH_PLUGIN_ERROR);
+    log_srv_dbg("loop sasl_server_step");
+    // sres = sasl_server_step(conn, buf, len, &data, &len);
+    sres = sasl_server_step(conn, client_in, client_in_len, &server_out,
+                            &server_out_len);
+    if (sres != SASL_OK && sres != SASL_CONTINUE) {
+      return _sasl_error(vio, &conn, "ERROR: Executing SASL step", sres);
     }
   }
 
-  if (res != SASL_OK) {
-    return log_sasl_error(vio, "ERROR: ending loop SASL ", res, true, true,
-                          &conn, CR_AUTH_PLUGIN_ERROR);
-  }
+  log_srv_dbg("sasl client communication complete");
 
-  // TODO: authenticate here??
-  // TODO: where are the username and password stored??
+  log_srv_dbg("processing sasl data");
+  const char *userid;
+  sres = sasl_getprop(conn, SASL_USERNAME,
+                      reinterpret_cast<const void **>(&userid));
+  if (sres != SASL_OK) {
+    return _sasl_error(vio, &conn, "ERROR: getting SASL_USERNAME", sres);
+  }
+  log_stream << "Username [" << userid << "]";
+  log_srv_dbg(log_stream.str());
+  log_stream.str("");
+
+  log_srv_dbg("authenticate");
+  // int ldapexample_sasl_interact(LDAP * ld, unsigned flags, void * defaults,
+  // void * sin) Copy defaults to sin
+  //   err = ldap_sasl_interactive_bind_s
+  //       (
+  //          ld,                         // LDAP                    * ld
+  //          NULL,                       // const char              * dn
+  //          config.auth.saslmech,       // const char              * mechs
+  //          NULL,                       // LDAPControl             * sctrls[]
+  //          NULL,                       // LDAPControl             * cctrls[]
+  //          LDAP_SASL_QUIET,            // unsigned                  flags
+  //          ldapexample_sasl_interact,  // LDAP_SASL_INTERACT_PROC * interact
+  //          &ptr /* TODO: pass here *buf */                // void * defaults
+  //       );
+  // if (err != LDAP_SUCCESS)
+
+  // int do_interact(LDAP * ld, unsigned flags, void *defaults, void *in) {
+  //   sasl_interact_t *interact = in;
+  //   char *sasl_defaults = (char *)defaults;
+  //   const char *dflt = interact->defresult;
+  //   dflt = sasl_defaults;
+  //   interact->result = (dflt && *dflt) ? dflt : "";
+  //   interact->len = strlen(interact->result);
+  //   return LDAP_SUCCESS;
+  // }
+
+  // TODO: where is the password stored??
   char *password = nullptr;
   // https://github.com/percona/percona-server/blob/8.0/libmysql/authentication_ldap/auth_ldap_sasl_client.cc
 
-  res = auth_ldap_common_authenticate_user(vio, info, password, connPool,
-                                           user_search_attr, group_search_attr,
-                                           group_search_filter, bind_base_dn);
+  int res = auth_ldap_common_authenticate_user(
+      vio, info, password, connPool, user_search_attr, group_search_attr,
+      group_search_filter, bind_base_dn);
 
-  if (vio->write_packet(
-          vio,
-          static_cast<const unsigned char *>(
-              static_cast<const void *>(res == CR_OK ? "O" : "N")),
-          1) != 0) {
-    return log_sasl_error(vio, "ERROR: writing OK to SASL client", SASL_OK,
-                          true, true, &conn, CR_AUTH_PLUGIN_ERROR);
+  log_srv_dbg("send sasl authentication result");
+
+  res = CR_OK;
+  if (!_client_send(vio, res == CR_OK ? "O" : "N")) {
+    return _sasl_error(vio, &conn, "ERROR: Sending SASL last packet");
   }
+
   log_srv_dbg("SASL negotiation complete");
 
   sasl_dispose(&conn);
 
-  return CR_OK;
+  return res;
 }
 
 // Plugin declaration
-struct st_mysql_auth alp_sasl_handler = {
+struct st_mysql_auth mpaldap_sasl_handler = {
     MYSQL_AUTHENTICATION_INTERFACE_VERSION,  // int interface_version
     "authentication_ldap_sasl_client",       // const char *client_auth_plugin
-    &alp_sasl_authenticate,                  // authentication function
+    &mpaldap_sasl_authenticate,                  // authentication function
     &auth_ldap_common_generate_auth_string_hash,  // generate_authentication_string
     &auth_ldap_common_validate_auth_string_hash,  // validate_authentication_string
     &auth_ldap_common_set_salt,                   // set_salt
@@ -252,8 +438,8 @@ struct st_mysql_auth alp_sasl_handler = {
 
 mysql_declare_plugin(auth_ldap_sasl) {
   MYSQL_AUTHENTICATION_PLUGIN,           /* plugin type */
-      &alp_sasl_handler,                 /* type-specific descriptor */
-      ALP_SASL_PLUGIN_NAME,              /* plugin name */
+      &mpaldap_sasl_handler,                 /* type-specific descriptor */
+      MPALDAP_SASL_PLUGIN_NAME,              /* plugin name */
       "Francisco Miguel Biete Banon",    /* author */
       "LDAP SASL authentication plugin", /* description */
       PLUGIN_LICENSE_GPL,                /* license type */
@@ -262,7 +448,7 @@ mysql_declare_plugin(auth_ldap_sasl) {
       nullptr,                           /* no check function */
       0x0100,                            /* version = 1.0 */
       nullptr,                           /* no status variables */
-      alp_sysvars,                       /* system variables */
+      mpaldap_sysvars,                       /* system variables */
       nullptr                            /* no reserved information */
 #if MYSQL_PLUGIN_INTERFACE_VERSION >= 0x103
       ,

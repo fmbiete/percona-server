@@ -18,4 +18,3 @@
 #define MPALDAP_SASL_PLUGIN_NAME "authentication_ldap_sasl"
 
 #endif  // _PLUGIN_SASL_MPALDAP_H
-MPALDAP_

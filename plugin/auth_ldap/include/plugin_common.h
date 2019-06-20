@@ -48,4 +48,5 @@ int auth_ldap_common_validate_auth_string_hash(char *const buf,
 int auth_ldap_common_set_salt(const char *password, unsigned int password_len,
                               unsigned char *salt, unsigned char *salt_len);
 
+
 #endif  // _PLUGIN_COMMON_MPALDAP_H
